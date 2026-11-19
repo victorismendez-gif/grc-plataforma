@@ -6,8 +6,8 @@ const PUBLIC_PATHS = ["/login", "/recuperar", "/auth/"];
 /** Refresca la sesión en cada solicitud y envía al ingreso si no hay usuario. */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!url || !key) return response;
 
   const supabase = createServerClient(url, key, {
