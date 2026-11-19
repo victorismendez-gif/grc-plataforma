@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionState } from "@/lib/auth";
+import HashSessionCatcher from "@/components/hash-session-catcher";
 import { login } from "./actions";
 
 export const metadata: Metadata = { title: "Ingreso" };
@@ -22,6 +23,7 @@ export default async function LoginPage({ searchParams }: Props) {
 
   return (
     <div className="auth">
+      <HashSessionCatcher />
       <div className="card">
         <div className="head">
           <h1>Ingreso</h1>

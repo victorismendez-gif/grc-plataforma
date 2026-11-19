@@ -18,6 +18,12 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const supabase = await createClient();
 
+  // Plantilla predeterminada de Supabase: la sesión viene en el fragmento #,
+  // que el navegador conserva al redirigir; la página /auth/sesion la lee.
+  if (!tokenHash && !code && !searchParams.get("error")) {
+    return NextResponse.redirect(new URL(`/auth/sesion?next=${encodeURIComponent(next)}`, origin));
+  }
+
   let ok = false;
   if (tokenHash && type && OTP_TYPES.includes(type)) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
