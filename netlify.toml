@@ -5,3 +5,7 @@
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --no-fund"
+  # Las variables NEXT_PUBLIC_* son públicas por diseño: van dentro del código
+  # que descarga el navegador (la seguridad la da RLS en la base). Se excluyen
+  # del escaneo de secretos; SUPABASE_SERVICE_ROLE_KEY sí se sigue vigilando.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SITE_URL"
