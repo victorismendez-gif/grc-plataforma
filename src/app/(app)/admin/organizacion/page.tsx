@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { requirePermission } from "@/lib/auth";
 import Flash, { type FlashParams } from "@/components/flash";
-import { updateOrganization } from "./actions";
+import { createClient } from "@/lib/supabase/server";
+import { saveCatalogItem, updateOrganization } from "./actions";
 
 export const metadata: Metadata = { title: "Organización" };
 
@@ -9,6 +10,12 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
   const ctx = await requirePermission("org.manage");
   const sp = await searchParams;
   const org = ctx.organization;
+  const supabase = await createClient();
+  const { data: items } = await supabase.from("catalog_items").select("id, catalog, code, label, active").order("sort_order");
+  const catalogs = [
+    { key: "info_classification", title: "Niveles de clasificación de la información" },
+    { key: "asset_type", title: "Tipos de activo" },
+  ];
   return (
     <>
       <div className="head">
@@ -50,6 +57,35 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
           <button type="submit">Guardar</button>
         </form>
       </section>
+      <div className="grid2">
+        {catalogs.map((c) => (
+          <section key={c.key} className="panel">
+            <h2>{c.title}</h2>
+            <table>
+              <tbody>
+                {(items ?? []).filter((i) => i.catalog === c.key).map((i) => (
+                  <tr key={i.id as string}>
+                    <td>
+                      <form action={saveCatalogItem} className="inline">
+                        <input type="hidden" name="catalog" value={c.key} />
+                        <input type="hidden" name="id" value={i.id as string} />
+                        <input name="label" defaultValue={i.label as string} maxLength={80} aria-label="Nombre" />
+                        <label className="check small"><input type="checkbox" name="active" defaultChecked={i.active as boolean} /> Activo</label>
+                        <button type="submit" className="ghost">Guardar</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <form action={saveCatalogItem} className="inline">
+              <input type="hidden" name="catalog" value={c.key} />
+              <input name="label" placeholder="Nuevo valor" maxLength={80} required aria-label="Nuevo valor" />
+              <button type="submit">Agregar</button>
+            </form>
+          </section>
+        ))}
+      </div>
     </>
   );
 }

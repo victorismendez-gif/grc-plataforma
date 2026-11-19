@@ -52,3 +52,41 @@ export async function updateOrganization(formData: FormData) {
   revalidatePath("/", "layout");
   done(PATH, "Datos de la organización guardados.");
 }
+
+const CATALOGS = ["asset_type", "info_classification"] as const;
+
+export async function saveCatalogItem(formData: FormData) {
+  const ctx = await requirePermission("org.manage");
+  const catalog = str(formData, "catalog") as (typeof CATALOGS)[number];
+  if (!CATALOGS.includes(catalog)) fail(PATH, "Catálogo no válido.");
+  const labelText = str(formData, "label").slice(0, 80);
+  if (!labelText) fail(PATH, "Escribe el nombre.");
+  const id = str(formData, "id");
+  const supabase = await createClient();
+  if (id) {
+    const { error } = await supabase
+      .from("catalog_items")
+      .update({ label: labelText, active: formData.get("active") === "on" })
+      .eq("id", id);
+    if (error) fail(PATH, dbMessage(error, "No se pudo guardar."));
+  } else {
+    const code = labelText
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40);
+    if (!code) fail(PATH, "El nombre debe tener letras o números.");
+    const { error } = await supabase.from("catalog_items").insert({
+      organization_id: ctx.organization.id,
+      catalog,
+      code,
+      label: labelText,
+      sort_order: 500,
+    });
+    if (error) fail(PATH, dbMessage(error, "No se pudo agregar."));
+  }
+  revalidatePath(PATH);
+  done(PATH, "Catálogo actualizado.");
+}

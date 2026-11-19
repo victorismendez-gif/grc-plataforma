@@ -6,6 +6,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const org = ctx.organization;
 
   const items: NavItem[] = [{ href: "/", label: "Inicio" }];
+  if (ctx.can("assets.read")) items.push({ href: "/activos", label: "Activos" }, { href: "/estructura", label: "Estructura" });
+  if (ctx.can("frameworks.read")) items.push({ href: "/normas", label: "Normas" });
+  if (ctx.can("controls.read")) items.push({ href: "/controles", label: "Controles" });
+  if (ctx.can("documents.read")) items.push({ href: "/documentos", label: "Documentos" }, { href: "/politicas", label: "Políticas" });
   if (ctx.can("users.manage")) items.push({ href: "/admin/usuarios", label: "Usuarios" });
   if (ctx.can("roles.manage")) items.push({ href: "/admin/roles", label: "Roles y permisos" });
   if (ctx.can("audit_log.read")) items.push({ href: "/admin/trazabilidad", label: "Trazabilidad" });

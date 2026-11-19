@@ -34,9 +34,9 @@ export default async function HomePage() {
       <section className="panel">
         <h2>Estado de la plataforma</h2>
         <p className="muted small">
-          Fase 1 activa: ingreso con doble factor, usuarios, roles y permisos verificados en el servidor y en la base,
-          y registro de auditoría inalterable. Los módulos de activos, normas, GAP, riesgos, terceros, auditoría y
-          tableros se habilitan en las siguientes fases.
+          Disponibles: activos de información con importación mensual, estructura de la organización, normas y
+          requisitos, controles, documentos con flujo de aprobación y políticas. Próximamente: diagnóstico GAP y plan de
+          trabajo, riesgos, terceros, auditoría y tableros.
         </p>
       </section>
     </>

@@ -27,12 +27,7 @@ jobs:
         with:
           node-version: 22
       - name: Instalar dependencias
-        run: |
-          if [ -f package-lock.json ]; then
-            bash .github/scripts/annotate.sh "npm ci" npm ci --no-audit --no-fund
-          else
-            bash .github/scripts/annotate.sh "npm install" npm install --no-audit --no-fund
-          fi
+        run: bash .github/scripts/annotate.sh "npm install" npm install --no-audit --no-fund
       - name: Verificar tipos
         run: bash .github/scripts/annotate.sh "TypeScript" npm run typecheck
       - name: Pruebas unitarias
@@ -62,7 +57,7 @@ jobs:
         run: bash .github/scripts/annotate.sh "supabase db lint" supabase db lint --level error
 
   lockfile:
-    name: Generar package-lock.json (solo si falta)
+    name: Actualizar package-lock.json (si cambió package.json)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: app
     runs-on: ubuntu-latest
@@ -75,12 +70,14 @@ jobs:
           node-version: 22
       - name: Generar y confirmar
         run: |
-          if [ -f package-lock.json ]; then echo "Ya existe"; exit 0; fi
           npm install --package-lock-only --no-audit --no-fund
+          if git diff --quiet -- package-lock.json && git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            echo "Sin cambios"; exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package-lock.json
-          git commit -m "chore: generar package-lock.json [skip ci]"
+          git commit -m "chore: actualizar package-lock.json [skip ci]"
           git push
 
   deploy-db:
