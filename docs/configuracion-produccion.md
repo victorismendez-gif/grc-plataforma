@@ -10,12 +10,13 @@ Proyecto Supabase: `grc-plataforma` (ref `dvggwzoyiqvlyzexjnqn`, región us-east
 | Sign In / Providers → Email → *Minimum password length* | 12, con minúsculas, mayúsculas, dígitos y símbolos |
 | Multi-Factor → TOTP | Habilitado (enroll y verify) |
 | URL Configuration → *Site URL* | URL de Netlify (por ejemplo `https://grc-plataforma.netlify.app`) |
-| URL Configuration → *Redirect URLs* | `https://<sitio>/auth/confirm` |
-| Emails → Templates → *Invite user* | Contenido de `supabase/templates/invite.html` |
-| Emails → Templates → *Reset password* | Contenido de `supabase/templates/recovery.html` |
+| URL Configuration → *Redirect URLs* | `https://<sitio>/**` |
 
-> El correo integrado de Supabase tiene un límite bajo de envíos por hora. En la Fase 7 se configura un proveedor
-> SMTP gratuito para invitaciones, recuperación y notificaciones.
+> **Correo.** Desde junio de 2026 los proyectos gratuitos con el correo predeterminado de Supabase no pueden editar
+> plantillas, solo envían a miembros del equipo del proyecto y tienen un límite de 2 correos por hora. La aplicación
+> funciona con las plantillas predeterminadas (la sesión llega en el fragmento `#` y la lee `/auth/sesion`). Para
+> invitar a personas fuera del equipo hay que configurar un SMTP propio gratuito (Authentication → SMTP Settings);
+> con él se pueden cargar las plantillas de `supabase/templates/`.
 
 ## 2. Netlify → Site configuration → Environment variables
 
