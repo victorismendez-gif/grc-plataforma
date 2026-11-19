@@ -12,7 +12,7 @@ terceros, auditoría (ISO 19011), acciones correctivas, tableros y reportes.
 | Fase | Alcance | Estado |
 | --- | --- | --- |
 | 1. Base | Repositorio, migraciones, ingreso con doble factor, roles, permisos en servidor, trazabilidad, CI/CD | Construida |
-| 2. Núcleo | Activos, normas y requisitos importables, controles, gestión documental y políticas | Pendiente |
+| 2. Núcleo | Activos, normas y requisitos importables, controles, gestión documental y políticas | Construida |
 | 3. GAP y plan de trabajo | | Pendiente |
 | 4. Riesgos | | Pendiente |
 | 5. Terceros | | Pendiente |
@@ -34,6 +34,24 @@ terceros, auditoría (ISO 19011), acciones correctivas, tableros y reportes.
 - **Reglas de integridad:** siempre queda al menos un administrador activo; el rol administrador no pierde permisos;
   nadie se desactiva a sí mismo.
 - **Cuentas solo por invitación** (registro público deshabilitado) y contraseñas de 12+ caracteres.
+
+## Núcleo (Fase 2)
+
+- **Estructura:** sedes, sucursales, tiendas y áreas en jerarquía sin ciclos; procesos con dueño y unidades.
+- **Activos:** inventario con dueño, custodio, unidad, clasificación (catálogo editable: Pública, Uso interno,
+  Confidencial) y valoración C-I-D; la criticidad es el mayor de los tres. **Importación mensual desde Excel/CSV**: el
+  archivo se lee en el navegador, `import_assets()` calcula nuevos, modificados (campo a campo), sin cambios y ausentes;
+  solo escribe al confirmar, en una transacción, y deja historial de cargas. Las columnas no estándar se guardan como
+  datos adicionales.
+- **Normas y requisitos:** catálogo por organización, importación desde Excel (`import_requirements()` deduce la
+  jerarquía por numeración) y estructura base de ISO/IEC 27001:2022 (cláusulas 4–10 y 93 controles del Anexo A con
+  títulos parafraseados; el texto oficial requiere licencia ISO).
+- **Controles:** tipo, naturaleza, frecuencia, implementación, calificación de diseño y eficacia; mapeo cruzado a
+  requisitos de varias normas y a activos.
+- **Documentos:** versiones con flujo elaborar → revisar → aprobar → publicar aplicado por `document_transition()`
+  (quien elabora no revisa ni aprueba), archivo privado en Storage con huella SHA-256, una sola versión vigente, fecha de
+  próxima revisión y enlace a requisitos como evidencia.
+- **Políticas:** las publicadas que requieren aceptación se leen y aceptan por versión; cobertura por política.
 
 ## Desarrollo local
 
