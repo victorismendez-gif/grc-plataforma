@@ -46,9 +46,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v5
         with:
-          version: latest
+          node-version: 22
+      # La CLI se instala desde npm (evita el límite de consultas de la API de GitHub)
+      - name: Instalar CLI de Supabase
+        run: npm install -g supabase@^2 --no-audit --no-fund && supabase --version
       - name: Iniciar Supabase local (Docker)
         run: bash .github/scripts/annotate.sh "supabase start" supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime
       - name: Pruebas de base de datos
@@ -91,9 +94,11 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v5
         with:
-          version: latest
+          node-version: 22
+      - name: Instalar CLI de Supabase
+        run: npm install -g supabase@^2 --no-audit --no-fund
       - name: Aplicar migraciones pendientes
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != ''
         run: |
