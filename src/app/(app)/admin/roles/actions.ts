@@ -48,7 +48,7 @@ export async function saveRolePermissions(formData: FormData) {
   const roleId = z.string().uuid().safeParse(str(formData, "role_id"));
   if (!roleId.success) fail(PATH, "Rol no válido.");
   const id = roleId.data;
-  const wanted = new Set(formData.getAll("perm").map(String).filter(isPermission));
+  const wanted = new Set<string>(formData.getAll("perm").map(String).filter(isPermission));
 
   const supabase = await createClient();
   const { data: role } = await supabase.from("roles").select("id, code, is_system, name").eq("id", id).maybeSingle();
