@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_PROJECT_REF: dvggwzoyiqvlyzexjnqn
+
+jobs:
+  app:
+    name: Aplicación (tipos, pruebas, compilación)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependencias
+        run: |
+          if [ -f package-lock.json ]; then
+            bash .github/scripts/annotate.sh "npm ci" npm ci --no-audit --no-fund
+          else
+            bash .github/scripts/annotate.sh "npm install" npm install --no-audit --no-fund
+          fi
+      - name: Verificar tipos
+        run: bash .github/scripts/annotate.sh "TypeScript" npm run typecheck
+      - name: Pruebas unitarias
+        run: bash .github/scripts/annotate.sh "Vitest" npx vitest run --reporter=default --reporter=github-actions
+      - name: Compilar
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_TELEMETRY_DISABLED: 1
+        run: bash .github/scripts/annotate.sh "next build" npm run build
+
+  db:
+    name: Base de datos (migraciones y pruebas pgTAP en Supabase local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Iniciar Supabase local (Docker)
+        run: bash .github/scripts/annotate.sh "supabase start" supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime
+      - name: Pruebas de base de datos
+        run: bash .github/scripts/annotate.sh "supabase test db" supabase test db
+      - name: Revisión de seguridad del esquema (lint)
+        run: bash .github/scripts/annotate.sh "supabase db lint" supabase db lint --level error
+
+  lockfile:
+    name: Generar package-lock.json (solo si falta)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generar y confirmar
+        run: |
+          if [ -f package-lock.json ]; then echo "Ya existe"; exit 0; fi
+          npm install --package-lock-only --no-audit --no-fund
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: generar package-lock.json [skip ci]"
+          git push
+
+  deploy-db:
+    name: Migraciones a producción
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [app, db]
+    runs-on: ubuntu-latest
+    environment: produccion
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Aplicar migraciones pendientes
+        if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != ''
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          bash .github/scripts/annotate.sh "supabase db push" supabase db push
+      - name: Aviso de configuración
+        if: env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_DB_PASSWORD == ''
+        run: echo "::warning title=Producción::Faltan los secretos SUPABASE_ACCESS_TOKEN y SUPABASE_DB_PASSWORD; no se aplicaron migraciones."
