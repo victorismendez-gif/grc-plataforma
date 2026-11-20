@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { CRITICALITY, IMPLEMENTATION, label, levelTone } from "@/lib/labels";
+import { ASSET_CRITICALITY, IMPLEMENTATION, label, level5Tone } from "@/lib/labels";
 import Flash from "@/components/flash";
 import AssetForm, { type AssetData } from "../asset-form";
 import { updateAsset } from "../actions";
@@ -43,7 +43,7 @@ export default async function AssetPage({ params, searchParams }: Props) {
         <Link href="/activos" className="small">← Activos</Link>
         <h1>
           <span className="mono">{asset.code}</span> · {asset.name}{" "}
-          {asset.criticality && <span className={`tag ${levelTone(asset.criticality)}`}>Criticidad {label(CRITICALITY, asset.criticality).toLowerCase()}</span>}
+          {asset.criticality && <span className={`tag ${level5Tone(asset.criticality)}`}>Criticidad {asset.criticality} · {label(ASSET_CRITICALITY, asset.criticality).toLowerCase()}</span>}
         </h1>
       </div>
       <Flash {...sp} />

@@ -15,7 +15,7 @@ export default async function NewAssetPage({ searchParams }: { searchParams: Fla
       <div className="head">
         <Link href="/activos" className="small">← Activos</Link>
         <h1>Nuevo activo</h1>
-        <p className="lead">La criticidad se calcula como el mayor valor entre confidencialidad, integridad y disponibilidad.</p>
+        <p className="lead">Elige el tipo de activo: los campos y el identificador único cambian según el tipo. La criticidad es el mayor valor entre confidencialidad, integridad y disponibilidad.</p>
       </div>
       <Flash {...sp} />
       <section className="panel">

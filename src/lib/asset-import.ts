@@ -1,39 +1,46 @@
 // Traduce las filas de un Excel/CSV de inventario a registros de activos.
-// Es código puro (sin red) para poder probarlo y usarlo en servidor.
+// Código puro (sin red): se usa en el servidor y en las pruebas.
 import { clean, normalize } from "@/lib/text";
+import { isIp, NAME_MAX, readSettings, type AssetTypeSettings, type ScaleLevel } from "@/lib/asset-profiles";
 
 export type Lookup = { id: string; code?: string | null; label?: string | null; name?: string | null; email?: string | null };
+export type TypeLookup = { id: string; code: string; label: string; settings: AssetTypeSettings | unknown };
 export type Lookups = {
-  assetTypes: Lookup[];
+  assetTypes: TypeLookup[];
   classifications: Lookup[];
-  units: Lookup[];
   profiles: Lookup[];
+  scale: Pick<ScaleLevel, "dimension" | "level" | "label">[];
 };
 
-export type AssetField =
-  | "code" | "name" | "asset_type_id" | "description" | "owner_id" | "custodian" | "unit_id" | "location"
-  | "classification_id" | "confidentiality" | "integrity" | "availability" | "status" | "brand" | "model"
-  | "serial_number" | "acquired_on";
+type MappedField =
+  | "code" | "id_placa" | "id_imei" | "id_documento"
+  | "asset_type_id" | "name" | "ip_address" | "status" | "brand" | "model" | "operating_system" | "serial_number"
+  | "owner_id" | "custodian" | "location" | "acquired_on" | "description"
+  | "classification_id" | "confidentiality" | "integrity" | "availability";
 
-/** Encabezados aceptados (normalizados) por campo. */
-const HEADER_ALIASES: Record<AssetField, string[]> = {
-  code: ["codigo", "cod", "codigoactivo", "idactivo", "id", "placa", "consecutivo", "activoid"],
-  name: ["nombre", "nombreactivo", "activo", "nombredelactivo"],
+/** Encabezados aceptados (normalizados, sin el texto entre paréntesis). */
+const HEADER_ALIASES: Record<MappedField, string[]> = {
+  code: ["identificador", "identificadorunico", "codigo", "cod", "codigoactivo", "idactivo", "id", "etiqueta", "consecutivo", "etiquetaonumero"],
+  id_placa: ["placa", "numerodeplaca"],
+  id_imei: ["imei"],
+  id_documento: ["documento", "documentodeidentidad", "cedula", "numerodedocumento", "numerodocumento"],
   asset_type_id: ["tipo", "tipoactivo", "tipodeactivo", "categoria"],
-  description: ["descripcion", "descripciondelactivo", "detalle"],
-  owner_id: ["dueno", "propietario", "responsable", "duenodelactivo", "correoresponsable"],
-  custodian: ["custodio", "custodiodelactivo"],
-  unit_id: ["unidad", "area", "sede", "dependencia", "unidadorganizacional"],
-  location: ["ubicacion", "ubicacionfisica", "lugar"],
-  classification_id: ["clasificacion", "nivelclasificacion", "clasificaciondelainformacion"],
-  confidentiality: ["confidencialidad", "c"],
-  integrity: ["integridad", "i"],
-  availability: ["disponibilidad", "d"],
+  name: ["nombre", "nombreactivo", "nombredelactivo", "activo", "hostname", "nombrehostname"],
+  ip_address: ["ip", "direccionip"],
   status: ["estado", "estadoactivo"],
   brand: ["marca", "fabricante"],
   model: ["modelo"],
+  operating_system: ["sistemaoperativo", "so"],
   serial_number: ["serial", "serie", "numerodeserie", "numeroserie", "sn"],
+  owner_id: ["responsable", "correoresponsable", "dueno", "propietario"],
+  custodian: ["custodio"],
+  location: ["ubicacion", "ubicacionfisica", "lugar"],
   acquired_on: ["fechaadquisicion", "fechadeadquisicion", "fechacompra", "fechadecompra"],
+  description: ["descripcion", "detalle"],
+  classification_id: ["clasificacion", "clasificaciondelainformacion", "nivelclasificacion"],
+  confidentiality: ["confidencialidad", "c"],
+  integrity: ["integridad", "i"],
+  availability: ["disponibilidad", "d"],
 };
 
 const STATUS_ALIASES: Record<string, string> = {
@@ -43,29 +50,29 @@ const STATUS_ALIASES: Record<string, string> = {
   perdido: "perdido", hurtado: "perdido", hurto: "perdido", robado: "perdido", perdidoohurtado: "perdido",
 };
 
-const LEVEL_ALIASES: Record<string, number> = {
-  "1": 1, bajo: 1, baja: 1, b: 1,
-  "2": 2, medio: 2, media: 2, m: 2,
-  "3": 3, alto: 3, alta: 3, a: 3,
-};
+const DIMENSION_OF = { confidentiality: "confidentiality", integrity: "integrity", availability: "availability" } as const;
 
-export type MappedRow = Record<string, unknown> & { code: string };
+export type MappedRow = Record<string, unknown> & { code: string | null };
 export type MappingResult = {
-  /** encabezado del archivo → campo (o "attributes" si va a datos adicionales) */
-  mapping: Record<string, AssetField | "attributes">;
-  /** campos presentes en el archivo (los demás no se modifican) */
+  mapping: Record<string, MappedField | "attributes">;
   fields: string[];
   rows: MappedRow[];
   warnings: string[];
   errors: string[];
+  autoCodes: number;
 };
 
-export function detectMapping(headers: string[]): Record<string, AssetField | "attributes"> {
-  const mapping: Record<string, AssetField | "attributes"> = {};
-  const used = new Set<AssetField>();
+/** Normaliza un encabezado: sin texto entre paréntesis, tildes ni símbolos. */
+export function headerKey(h: string): string {
+  return normalize(String(h).replace(/\(.*?\)/g, " "));
+}
+
+export function detectMapping(headers: string[]): Record<string, MappedField | "attributes"> {
+  const mapping: Record<string, MappedField | "attributes"> = {};
+  const used = new Set<MappedField>();
   for (const h of headers) {
-    const n = normalize(h);
-    const field = (Object.keys(HEADER_ALIASES) as AssetField[]).find((f) => !used.has(f) && HEADER_ALIASES[f].includes(n));
+    const n = headerKey(h);
+    const field = (Object.keys(HEADER_ALIASES) as MappedField[]).find((f) => !used.has(f) && HEADER_ALIASES[f].includes(n));
     if (field) {
       mapping[h] = field;
       used.add(field);
@@ -76,19 +83,24 @@ export function detectMapping(headers: string[]): Record<string, AssetField | "a
   return mapping;
 }
 
+/** ¿Tiene el archivo alguna columna que pueda identificar activos? */
+export function hasIdentifierColumn(mapping: Record<string, string>): boolean {
+  return Object.values(mapping).some((f) => ["code", "id_placa", "id_imei", "id_documento", "serial_number"].includes(f));
+}
+
 function findLookup(list: Lookup[], value: string): Lookup | undefined {
   const n = normalize(value);
   if (!n) return undefined;
-  return list.find(
-    (x) => normalize(x.code) === n || normalize(x.label) === n || normalize(x.name) === n || normalize(x.email) === n,
-  );
+  return list.find((x) => normalize(x.code) === n || normalize(x.label) === n || normalize(x.name) === n || normalize(x.email) === n);
 }
 
-function toLevel(value: unknown): number | null | "invalid" {
-  const s = clean(value);
-  if (s === null) return null;
-  const lvl = LEVEL_ALIASES[normalize(s)];
-  return lvl ?? "invalid";
+/** Convierte números de Excel en texto sin notación científica (IMEI, documentos). */
+function asText(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? BigInt(Math.round(value)).toString() : String(value);
+  }
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return clean(value);
 }
 
 function toDate(value: unknown): string | null | "invalid" {
@@ -97,7 +109,7 @@ function toDate(value: unknown): string | null | "invalid" {
   const s = String(value).trim();
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/); // dd/mm/aaaa (formato Colombia)
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/); // dd/mm/aaaa
   if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
   return "invalid";
 }
@@ -108,114 +120,165 @@ export function mapAssetRows(raw: Record<string, unknown>[], lookups: Lookups): 
   const mapping = detectMapping(headers);
   const warnings: string[] = [];
   const errors: string[] = [];
-  const fieldsPresent = new Set<string>(Object.values(mapping).filter((f) => f !== "code"));
+  const mapped = new Set(Object.values(mapping));
 
-  if (!Object.values(mapping).includes("code")) {
-    errors.push("No se encontró la columna de código del activo (por ejemplo «Código» o «Placa»).");
-    return { mapping, fields: [], rows: [], warnings, errors };
+  if (!mapped.has("asset_type_id")) {
+    errors.push("Falta la columna «Tipo de activo». Descarga la plantilla para ver el formato.");
   }
-  const otherType = lookups.assetTypes.find((t) => t.code === "otro");
+  if (!hasIdentifierColumn(mapping)) {
+    errors.push("Falta la columna «Identificador único» (o Placa, IMEI, Serial o Documento).");
+  }
+  if (errors.length) return { mapping, fields: [], rows: [], warnings, errors, autoCodes: 0 };
+
+  const types = lookups.assetTypes.map((t) => ({ ...t, settings: readSettings(t.settings) }));
+  const typeNames = types.map((t) => t.label).join(", ");
+  const realFields = new Set<string>(
+    [...mapped].filter((f) => !["code", "id_placa", "id_imei", "id_documento", "attributes"].includes(f)),
+  );
   const rows: MappedRow[] = [];
+  let autoCodes = 0;
 
   raw.forEach((r, i) => {
-    const line = i + 2; // fila 1 = encabezados
-    const out: Record<string, unknown> = {};
+    const line = i + 2;
+    const cell = (field: MappedField): unknown => {
+      const header = Object.keys(mapping).find((h) => mapping[h] === field);
+      return header === undefined ? undefined : r[header];
+    };
+    const values = Object.values(r).map(asText).filter((v) => v !== null);
+    if (values.length === 0) return; // fila vacía
+
+    const typeText = asText(cell("asset_type_id"));
+    const type = typeText ? types.find((t) => normalize(t.code) === normalize(typeText) || normalize(t.label) === normalize(typeText)) : undefined;
+    if (!type) {
+      errors.push(typeText ? `Fila ${line}: el tipo «${typeText}» no existe. Use uno de: ${typeNames}.` : `Fila ${line}: falta el tipo de activo.`);
+      return;
+    }
+    const idSpec = type.settings.identifier;
+    const out: Record<string, unknown> = { asset_type_id: type.id };
     const attributes: Record<string, string> = {};
+
+    // Identificador según el tipo
+    const byKind: Record<string, MappedField> = { placa: "id_placa", imei: "id_imei", documento: "id_documento", serial: "serial_number" };
+    let code = asText(cell("code"));
+    if (!code && byKind[idSpec.kind]) code = asText(cell(byKind[idSpec.kind]));
+    if (code && code.length > 60) {
+      errors.push(`Fila ${line}: el identificador supera 60 caracteres.`);
+      return;
+    }
+    if (!code) {
+      if (idSpec.required) {
+        errors.push(`Fila ${line}: falta ${idSpec.label} (obligatorio para «${type.label}»).`);
+        return;
+      }
+      autoCodes++;
+    } else if (idSpec.kind === "imei" && !/^\d{14,16}$/.test(code)) {
+      warnings.push(`Fila ${line}: el IMEI «${code}» no tiene 15 dígitos; revísalo.`);
+    }
+
     for (const [header, field] of Object.entries(mapping)) {
       const value = r[header];
-      if (field === "attributes") {
-        const s = clean(value instanceof Date ? value.toISOString().slice(0, 10) : value);
+      if (field === "code" || field === "asset_type_id") continue;
+      if (field === "attributes" || field === "id_placa" || field === "id_imei" || field === "id_documento") {
+        if (field !== "attributes" && byKind[idSpec.kind] === field) continue; // ya es el identificador
+        const s = asText(value);
         if (s !== null) attributes[header.trim()] = s.slice(0, 500);
         continue;
       }
       switch (field) {
-        case "code":
-        case "name":
-        case "description":
-        case "custodian":
-        case "location":
+        case "name": {
+          const s = asText(value);
+          if (s && s.length > NAME_MAX) errors.push(`Fila ${line}: el nombre del activo supera ${NAME_MAX} caracteres.`);
+          out.name = s;
+          break;
+        }
         case "brand":
         case "model":
+        case "operating_system":
         case "serial_number":
-          out[field] = clean(value)?.slice(0, field === "description" ? 2000 : 200) ?? null;
+          out[field] = asText(value)?.slice(0, 120) ?? null;
           break;
-        case "asset_type_id": {
-          const s = clean(value);
-          const hit = s ? findLookup(lookups.assetTypes, s) : undefined;
-          if (hit) out[field] = hit.id;
-          else {
-            out[field] = otherType?.id ?? null;
-            if (s) attributes["Tipo original"] = s;
-            if (s) warnings.push(`Fila ${line}: tipo «${s}» no está en el catálogo; se registró como «Otro».`);
-          }
+        case "custodian":
+        case "location":
+          out[field] = asText(value)?.slice(0, 200) ?? null;
+          break;
+        case "description":
+          out[field] = asText(value)?.slice(0, 2000) ?? null;
+          break;
+        case "ip_address": {
+          const s = asText(value);
+          if (s && !isIp(s)) errors.push(`Fila ${line}: «${s}» no es una dirección IP válida.`);
+          out.ip_address = s;
           break;
         }
         case "classification_id":
-        case "unit_id":
         case "owner_id": {
-          const s = clean(value);
-          const list =
-            field === "classification_id" ? lookups.classifications : field === "unit_id" ? lookups.units : lookups.profiles;
+          const s = asText(value);
+          const list = field === "classification_id" ? lookups.classifications : lookups.profiles;
           const hit = s ? findLookup(list, s) : undefined;
           out[field] = hit?.id ?? null;
           if (s && !hit) {
-            const names = { classification_id: "Clasificación", unit_id: "Unidad", owner_id: "Dueño" } as const;
-            attributes[`${names[field]} original`] = s;
-            warnings.push(`Fila ${line}: ${names[field].toLowerCase()} «${s}» no coincide con ningún registro; se guardó como dato adicional.`);
+            if (field === "classification_id") {
+              errors.push(`Fila ${line}: la clasificación «${s}» no existe. Use: ${lookups.classifications.map((c) => c.label).join(", ")}.`);
+            } else {
+              attributes["Responsable original"] = s;
+              warnings.push(`Fila ${line}: el responsable «${s}» no es un usuario de la plataforma; se guardó como dato adicional.`);
+            }
           }
           break;
         }
         case "confidentiality":
         case "integrity":
         case "availability": {
-          const lvl = toLevel(value);
-          if (lvl === "invalid") {
-            errors.push(`Fila ${line}: «${String(value)}» no es un nivel válido (use 1-3 o Bajo/Medio/Alto).`);
+          const s = asText(value);
+          if (s === null) {
             out[field] = null;
-          } else out[field] = lvl;
+            break;
+          }
+          const levels = lookups.scale.filter((l) => l.dimension === DIMENSION_OF[field]);
+          const n = Number(s.replace(",", "."));
+          const hit = Number.isInteger(n) && n >= 1 && n <= 5 ? n : levels.find((l) => normalize(l.label) === normalize(s))?.level;
+          if (!hit) errors.push(`Fila ${line}: «${s}» no es un nivel válido de ${field === "confidentiality" ? "confidencialidad" : field === "integrity" ? "integridad" : "disponibilidad"} (1 a 5).`);
+          out[field] = hit ?? null;
           break;
         }
         case "status": {
-          const s = clean(value);
-          if (s === null) out[field] = null;
+          const s = asText(value);
+          if (s === null) out.status = null;
           else {
             const st = STATUS_ALIASES[normalize(s)];
-            if (!st) errors.push(`Fila ${line}: estado «${s}» no reconocido.`);
-            out[field] = st ?? null;
+            if (!st) errors.push(`Fila ${line}: estado «${s}» no reconocido (Activo, En reparación, Dado de baja, Perdido o hurtado).`);
+            out.status = st ?? null;
           }
           break;
         }
         case "acquired_on": {
           const d = toDate(value);
           if (d === "invalid") {
-            warnings.push(`Fila ${line}: fecha «${String(value)}» no reconocida; se dejó vacía.`);
-            out[field] = null;
-          } else out[field] = d;
+            warnings.push(`Fila ${line}: fecha «${String(value)}» no reconocida (use AAAA-MM-DD); se dejó vacía.`);
+            out.acquired_on = null;
+          } else out.acquired_on = d;
           break;
         }
       }
     }
-    const code = typeof out.code === "string" ? out.code : "";
-    if (!code) {
-      // Filas completamente vacías se ignoran; las que tienen datos sin código son error
-      if (Object.values(out).some((v) => v !== null) || Object.keys(attributes).length) {
-        errors.push(`Fila ${line}: falta el código del activo.`);
-      }
-      return;
-    }
-    if (fieldsPresent.has("attributes") || Object.keys(attributes).length) {
+    if (Object.keys(attributes).length || realFields.has("attributes")) {
       out.attributes = attributes;
-      fieldsPresent.add("attributes");
+      realFields.add("attributes");
     }
-    if (!("asset_type_id" in out)) out.asset_type_id = otherType?.id ?? null;
-    rows.push({ ...out, code } as MappedRow);
+    if (mapped.has("attributes") || mapped.has("id_placa") || mapped.has("id_imei") || mapped.has("id_documento")) realFields.add("attributes");
+    rows.push({ ...out, code: code ?? null });
   });
 
   const seen = new Map<string, number>();
-  for (const r of rows) seen.set(r.code, (seen.get(r.code) ?? 0) + 1);
+  for (const r of rows) if (r.code) seen.set(r.code, (seen.get(r.code) ?? 0) + 1);
   const dupes = [...seen].filter(([, n]) => n > 1).map(([c]) => c);
-  if (dupes.length) errors.push(`Códigos repetidos en el archivo: ${dupes.slice(0, 20).join(", ")}.`);
+  if (dupes.length) errors.push(`Identificadores repetidos en el archivo: ${dupes.slice(0, 20).join(", ")}.`);
   if (rows.length > 5000) errors.push("El archivo supera 5.000 activos; divídelo en varias cargas.");
-
-  return { mapping, fields: [...fieldsPresent], rows, warnings: warnings.slice(0, 200), errors: errors.slice(0, 200) };
+  if (autoCodes) {
+    warnings.unshift(
+      `${autoCodes} activo(s) sin identificador recibirán un número automático. En la próxima carga, usa «Exportar inventario» para conservar esos números y no duplicarlos.`,
+    );
+  }
+  realFields.add("asset_type_id");
+  return { mapping, fields: [...realFields], rows, warnings: warnings.slice(0, 200), errors: errors.slice(0, 200), autoCodes };
 }

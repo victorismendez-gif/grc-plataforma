@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
+import { IDENTIFIER_KINDS, OPTIONAL_FIELDS, readSettings, type IdentifierKind } from "@/lib/asset-profiles";
 
 const PATH = "/admin/organizacion";
 
@@ -84,9 +85,64 @@ export async function saveCatalogItem(formData: FormData) {
       code,
       label: labelText,
       sort_order: 500,
+      settings: catalog === "asset_type" ? readSettings({}) : {},
     });
     if (error) fail(PATH, dbMessage(error, "No se pudo agregar."));
   }
   revalidatePath(PATH);
   done(PATH, "Catálogo actualizado.");
+}
+
+/** Perfil de un tipo de activo: identificador único y campos visibles. */
+export async function saveAssetTypeProfile(formData: FormData) {
+  await requirePermission("org.manage");
+  const id = str(formData, "id");
+  if (!/^[0-9a-f-]{36}$/.test(id)) fail(PATH, "Tipo no válido.");
+  const labelText = str(formData, "label").slice(0, 80);
+  if (!labelText) fail(PATH, "Escribe el nombre del tipo.");
+  const kind = str(formData, "kind") as IdentifierKind;
+  if (!(kind in IDENTIFIER_KINDS)) fail(PATH, "Identificador no válido.");
+  const fields = formData.getAll("fields").map(String);
+  const settings = readSettings({
+    identifier: {
+      kind,
+      label: str(formData, "id_label").slice(0, 40) || IDENTIFIER_KINDS[kind],
+      required: formData.get("required") === "on",
+    },
+    fields: OPTIONAL_FIELDS.filter((f) => fields.includes(f)),
+    name_label: str(formData, "name_label").slice(0, 40) || undefined,
+  });
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ label: labelText, active: formData.get("active") === "on", settings })
+    .eq("id", id)
+    .eq("catalog", "asset_type");
+  if (error) fail(PATH, dbMessage(error, "No se pudo guardar el tipo."));
+  revalidatePath(PATH);
+  revalidatePath("/activos");
+  done(PATH, `Tipo «${labelText}» actualizado.`);
+}
+
+const DIMENSIONS = ["confidentiality", "integrity", "availability"] as const;
+
+/** Escala de valoración: nombre y definición de los 5 niveles de una dimensión. */
+export async function saveScale(formData: FormData) {
+  await requirePermission("org.manage");
+  const dimension = str(formData, "dimension") as (typeof DIMENSIONS)[number];
+  if (!DIMENSIONS.includes(dimension)) fail(PATH, "Dimensión no válida.");
+  const supabase = await createClient();
+  for (let level = 1; level <= 5; level++) {
+    const labelText = str(formData, `label_${level}`).slice(0, 60);
+    if (!labelText) fail(PATH, `El nivel ${level} necesita un nombre.`);
+    const { error } = await supabase
+      .from("valuation_levels")
+      .update({ label: labelText, description: str(formData, `description_${level}`).slice(0, 1000) || null })
+      .eq("dimension", dimension)
+      .eq("level", level);
+    if (error) fail(PATH, dbMessage(error, "No se pudo guardar la escala."));
+  }
+  revalidatePath(PATH);
+  revalidatePath("/activos");
+  done(PATH, "Escala de valoración guardada.");
 }

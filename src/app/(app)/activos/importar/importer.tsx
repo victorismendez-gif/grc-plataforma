@@ -1,28 +1,17 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { detectMapping } from "@/lib/asset-import";
+import { detectMapping, hasIdentifierColumn } from "@/lib/asset-import";
+import { FIELD_LABELS as BASE_LABELS } from "@/lib/asset-profiles";
 import { readWorkbook, rowsToObjects, writeWorkbook, type SheetData } from "@/lib/spreadsheet";
 import { processAssetImport, type ImportPreview } from "../actions";
 
 const FIELD_LABELS: Record<string, string> = {
-  code: "Código",
-  name: "Nombre",
-  asset_type_id: "Tipo",
-  description: "Descripción",
-  owner_id: "Dueño",
-  custodian: "Custodio",
-  unit_id: "Unidad",
-  location: "Ubicación",
-  classification_id: "Clasificación",
-  confidentiality: "Confidencialidad",
-  integrity: "Integridad",
-  availability: "Disponibilidad",
-  status: "Estado",
-  brand: "Marca",
-  model: "Modelo",
-  serial_number: "Serial",
-  acquired_on: "Fecha de adquisición",
+  ...BASE_LABELS,
+  code: "Identificador único",
+  id_placa: "Placa (identificador de computadores)",
+  id_imei: "IMEI (identificador de celulares y tabletas)",
+  id_documento: "Documento de identidad (identificador de empleados)",
   attributes: "Dato adicional",
 };
 
@@ -30,7 +19,7 @@ const FIELD_LABELS: Record<string, string> = {
 function guessHeaderRow(rows: unknown[][]): number {
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const m = detectMapping((rows[i] ?? []).map((c) => String(c ?? "")));
-    if (Object.values(m).includes("code")) return i;
+    if (hasIdentifierColumn(m) && Object.values(m).includes("asset_type_id")) return i;
   }
   return 0;
 }
@@ -62,8 +51,8 @@ export default function AssetImporter() {
       // Elige la hoja con más filas que tenga columna de código
       let best = 0;
       wb.forEach((s, i) => {
-        const hasCode = Object.values(detectMapping((s.rows[guessHeaderRow(s.rows)] ?? []).map(String))).includes("code");
-        const bestHas = Object.values(detectMapping((wb[best].rows[guessHeaderRow(wb[best].rows)] ?? []).map(String))).includes("code");
+        const hasCode = hasIdentifierColumn(detectMapping((s.rows[guessHeaderRow(s.rows)] ?? []).map(String)));
+        const bestHas = hasIdentifierColumn(detectMapping((wb[best].rows[guessHeaderRow(wb[best].rows)] ?? []).map(String)));
         if ((hasCode && !bestHas) || (hasCode === bestHas && s.rows.length > wb[best].rows.length)) best = i;
       });
       setFileName(file.name);
@@ -110,6 +99,11 @@ export default function AssetImporter() {
     <div className="stack" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <section className="panel">
         <h2>1. Archivo</h2>
+        <p className="small muted">
+          Usa la <a href="/activos/plantilla">plantilla de carga</a> para evitar problemas de formato: trae listas
+          desplegables y la explicación de cada campo. Para actualizar el inventario del mes, parte de{" "}
+          <a href="/activos/plantilla?datos=1">Exportar inventario</a>, que conserva los identificadores asignados.
+        </p>
         <label>
           Inventario en Excel o CSV
           <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => onFile(e.target.files?.[0])} />
@@ -138,8 +132,9 @@ export default function AssetImporter() {
         <section className="panel">
           <h2>2. Columnas reconocidas</h2>
           <p className="small muted">
-            Las columnas que no corresponden a un campo estándar se guardan como datos adicionales del activo. La columna de
-            código es la que identifica cada activo entre una carga y la siguiente.
+            Las columnas que no corresponden a un campo estándar se guardan como datos adicionales del activo. El
+            identificador único (placa, IMEI, serial, documento o etiqueta, según el tipo) es el que reconoce cada activo
+            entre una carga y la siguiente.
           </p>
           <div className="tablewrap">
             <table>
@@ -156,7 +151,7 @@ export default function AssetImporter() {
             </table>
           </div>
           <div>
-            <button type="button" onClick={analyze} disabled={pending || !Object.values(mapping).includes("code")}>
+            <button type="button" onClick={analyze} disabled={pending || !hasIdentifierColumn(mapping)}>
               {pending && !applied ? "Analizando…" : "Analizar diferencias"}
             </button>
           </div>
