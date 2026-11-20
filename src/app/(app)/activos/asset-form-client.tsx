@@ -55,21 +55,36 @@ export default function AssetFormClient({ asset, types, classes, people, process
     <form action={action} className="stack">
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 16 }}>
         {asset?.id && <input type="hidden" name="id" value={asset.id} />}
-        <label style={{ maxWidth: 360 }}>
-          Tipo de activo
-          <select name="asset_type_id" value={typeId} onChange={(e) => setTypeId(e.target.value)} required>
-            <option value="" disabled>Selecciona el tipo…</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
-        </label>
+        {!asset?.id && !readOnly && (
+          <div className="callout">
+            <span className="small">
+              <b>¿Vas a registrar varios activos?</b> Descarga la plantilla, llénala en Excel y cárgala de una vez.
+            </span>
+            <span className="row">
+              <a className="btn ghost" href="/activos/plantilla">Descargar plantilla</a>
+              <a className="btn" href="/activos/importar">Cargar desde Excel</a>
+            </span>
+          </div>
+        )}
+        <div className="form-grid">
+          <label>
+            Tipo de activo *
+            <select name="asset_type_id" value={typeId} onChange={(e) => setTypeId(e.target.value)} required>
+              <option value="" disabled>Selecciona el tipo…</option>
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {!type ? (
-          <p className="small muted">Elige el tipo de activo para ver sus campos.</p>
+          <p className="small muted">Elige el tipo de activo para ver sus campos, o cárgalos desde Excel.</p>
         ) : (
           <>
-            <div className="row">
+            <fieldset className="form-section">
+              <legend>Datos del activo</legend>
+              <div className="form-grid">
               <label>
                 {type.settings.identifier.label}
                 {type.settings.identifier.required ? " *" : ""}
@@ -85,11 +100,12 @@ export default function AssetFormClient({ asset, types, classes, people, process
               {type.settings.fields.map((f) => (
                 <Field key={f} field={f} label={fieldLabel(f, type.settings)} asset={asset} people={people} />
               ))}
-            </div>
+              </div>
+            </fieldset>
 
-            <fieldset style={{ border: "1px solid var(--line)", borderRadius: 6 }}>
-              <legend className="small"><b>Clasificación y valoración</b></legend>
-              <div className="row">
+            <fieldset className="form-section">
+              <legend>Clasificación y valoración</legend>
+              <div className="form-grid">
                 <label>
                   Clasificación de la información
                   <select name="classification_id" defaultValue={asset?.classification_id ?? ""}>
@@ -104,8 +120,8 @@ export default function AssetFormClient({ asset, types, classes, people, process
             </fieldset>
 
             {processes.length > 0 && (
-              <fieldset style={{ border: "1px solid var(--line)", borderRadius: 6 }}>
-                <legend className="small">Procesos que soporta</legend>
+              <fieldset className="form-section">
+                <legend>Procesos que soporta</legend>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 18px" }}>
                   {processes.map((p) => (
                     <label key={p.id} className="check">
@@ -133,9 +149,8 @@ function Field({ field, label, asset, people }: { field: OptionalField; label: s
     case "name":
       return (
         <label>
-          {label}
-          <input name="name" defaultValue={asset?.name ?? ""} maxLength={NAME_MAX} size={40} />
-          <span className="small muted">Máximo {NAME_MAX} caracteres</span>
+          <span>{label} <span className="field-hint">(máx. {NAME_MAX})</span></span>
+          <input name="name" defaultValue={asset?.name ?? ""} maxLength={NAME_MAX} />
         </label>
       );
     case "status":
@@ -159,7 +174,7 @@ function Field({ field, label, asset, people }: { field: OptionalField; label: s
       );
     case "description":
       return (
-        <label style={{ flexBasis: "100%" }}>
+        <label className="span-all">
           {label}
           <textarea name="description" defaultValue={asset?.description ?? ""} rows={2} maxLength={2000} />
         </label>
@@ -175,7 +190,7 @@ function Field({ field, label, asset, people }: { field: OptionalField; label: s
       return (
         <label>
           {label}
-          <input name="ip_address" defaultValue={asset?.ip_address ?? ""} placeholder="10.0.0.15" maxLength={45} size={18} />
+          <input name="ip_address" defaultValue={asset?.ip_address ?? ""} placeholder="10.0.0.15" maxLength={45} />
         </label>
       );
     default:
@@ -192,7 +207,7 @@ function ScaleField({ dimension, levels, value }: { dimension: keyof typeof DIME
   const [current, setCurrent] = useState<string>(value ? String(value) : "");
   const desc = levels.find((l) => String(l.level) === current)?.description;
   return (
-    <label style={{ maxWidth: 260 }}>
+    <label title={desc ?? undefined}>
       {DIMENSIONS[dimension]}
       <select name={dimension} value={current} onChange={(e) => setCurrent(e.target.value)}>
         <option value="">—</option>
@@ -202,7 +217,7 @@ function ScaleField({ dimension, levels, value }: { dimension: keyof typeof DIME
           </option>
         ))}
       </select>
-      {desc && <span className="small muted" style={{ fontWeight: 400 }}>{desc}</span>}
+      <span className="field-hint" style={{ minHeight: 32 }}>{desc ?? "Elige un nivel de 1 a 5."}</span>
     </label>
   );
 }

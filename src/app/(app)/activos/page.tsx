@@ -61,7 +61,7 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
           <div className="row">
             <a className="btn ghost" href="/activos/plantilla">Descargar plantilla</a>
             <a className="btn ghost" href="/activos/plantilla?datos=1">Exportar inventario</a>
-            <Link className="btn ghost" href="/activos/importar">Importar Excel</Link>
+            <Link className="btn ghost" href="/activos/importar">Cargar desde Excel</Link>
             <Link className="btn" href="/activos/nuevo">Nuevo activo</Link>
           </div>
         )}

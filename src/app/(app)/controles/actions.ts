@@ -4,38 +4,66 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
-import { oneOf, optDate, optLevel, optText, optUuid } from "@/lib/forms-parse";
-import { CONTROL_NATURE, CONTROL_TYPES, FREQUENCIES, IMPLEMENTATION, keysOf } from "@/lib/labels";
+import { oneOf, optLevel, optText, optUuid } from "@/lib/forms-parse";
+import { CONTROL_NATURE, CONTROL_TYPES, DOCUMENTATION, EVIDENCE, FREQUENCIES, IMPLEMENTATION, keysOf } from "@/lib/labels";
+import { CONTROL_CODE_RE, defaultEffectiveness } from "@/lib/control-fields";
+import { mapControlRows } from "@/lib/control-import";
+import { getPeople } from "@/lib/lookups";
+import { normalize } from "@/lib/text";
+import type { ImportPreview } from "../activos/actions";
 
-function controlRecord(fd: FormData) {
+async function controlRecord(fd: FormData) {
+  const design = optLevel(fd, "design_rating");
+  const application = optLevel(fd, "application_rating");
+  // Responsable: si coincide con un usuario se enlaza; si no, se guarda el texto
+  const ownerText = str(fd, "owner").slice(0, 120);
+  let owner_id: string | null = null;
+  let owner_text: string | null = null;
+  if (ownerText) {
+    const people = await getPeople();
+    const n = normalize(ownerText);
+    const hit = people.find((p) => normalize(p.label) === n || normalize(p.code) === n);
+    if (hit) owner_id = hit.id;
+    else owner_text = ownerText;
+  }
   return {
     code: str(fd, "code").replace(/\s+/g, "").slice(0, 30),
     name: str(fd, "name").slice(0, 200),
-    description: optText(fd, "description"),
+    description: optText(fd, "description", 5000),
+    owner_id,
+    owner_text,
     control_type: oneOf(fd, "control_type", keysOf(CONTROL_TYPES), "preventivo"),
     nature: oneOf(fd, "nature", keysOf(CONTROL_NATURE), "manual"),
     frequency: oneOf(fd, "frequency", keysOf(FREQUENCIES), "continuo"),
-    owner_id: optUuid(fd, "owner_id"),
-    process_id: optUuid(fd, "process_id"),
+    documentation: (fd.get("documentation")?.toString() || null) as string | null,
+    evidence: (fd.get("evidence")?.toString() || null) as string | null,
+    design_rating: design,
+    application_rating: application,
+    effectiveness_rating: defaultEffectiveness(design, application, optLevel(fd, "effectiveness_rating")),
     implementation_status: oneOf(fd, "implementation_status", keysOf(IMPLEMENTATION), "planeado"),
-    design_rating: optLevel(fd, "design_rating"),
-    effectiveness_rating: optLevel(fd, "effectiveness_rating"),
-    last_evaluated_on: optDate(fd, "last_evaluated_on"),
-    evidence_notes: optText(fd, "evidence_notes"),
   };
+}
+
+function validControl(rec: Awaited<ReturnType<typeof controlRecord>>): string | null {
+  if (!CONTROL_CODE_RE.test(rec.code)) return "El ID solo admite letras, números, punto, guion y guion bajo, sin espacios (máx. 30).";
+  if (rec.name.length < 2) return "Escribe el nombre del control.";
+  if (rec.documentation && !(rec.documentation in DOCUMENTATION)) return "Documentación no válida.";
+  if (rec.evidence && !(rec.evidence in EVIDENCE)) return "Evidencia no válida.";
+  return null;
 }
 
 export async function createControl(formData: FormData) {
   const ctx = await requirePermission("controls.write");
-  const rec = controlRecord(formData);
-  if (!/^[A-Za-z0-9._-]{1,30}$/.test(rec.code) || rec.name.length < 2) fail("/controles", "Escribe un código (sin espacios) y un nombre.");
+  const rec = await controlRecord(formData);
+  const problem = validControl(rec);
+  if (problem) fail("/controles/nuevo", problem);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("controls")
     .insert({ ...rec, organization_id: ctx.organization.id })
     .select("id")
     .single();
-  if (error || !data) fail("/controles", dbMessage(error, "No se pudo crear el control."));
+  if (error || !data) fail("/controles/nuevo", error?.code === "23505" ? `Ya existe un control con el ID ${rec.code}.` : dbMessage(error, "No se pudo crear el control."));
   revalidatePath("/controles");
   redirect(`/controles/${data.id}?ok=${encodeURIComponent("Control creado. Asócialo a requisitos y activos.")}`);
 }
@@ -44,13 +72,34 @@ export async function updateControl(formData: FormData) {
   await requirePermission("controls.write");
   const id = optUuid(formData, "id");
   if (!id) fail("/controles", "Control no válido.");
-  const rec = controlRecord(formData);
-  if (!/^[A-Za-z0-9._-]{1,30}$/.test(rec.code) || rec.name.length < 2) fail(`/controles/${id}`, "Código y nombre son obligatorios.");
+  const rec = await controlRecord(formData);
+  const problem = validControl(rec);
+  if (problem) fail(`/controles/${id}`, problem);
   const supabase = await createClient();
   const { error } = await supabase.from("controls").update(rec).eq("id", id);
-  if (error) fail(`/controles/${id}`, dbMessage(error, "No se pudo guardar."));
+  if (error) fail(`/controles/${id}`, error.code === "23505" ? `Ya existe un control con el ID ${rec.code}.` : dbMessage(error, "No se pudo guardar."));
   revalidatePath("/controles");
   done(`/controles/${id}`, "Control actualizado.");
+}
+
+/** Analiza (apply=false) o aplica (apply=true) un archivo de controles leído en el navegador. */
+export async function processControlImport(
+  fileName: string,
+  rawRows: Record<string, unknown>[],
+  apply: boolean,
+): Promise<ImportPreview> {
+  await requirePermission("controls.write");
+  if (!Array.isArray(rawRows) || rawRows.length === 0) return { ok: false, message: "El archivo no tiene filas." };
+  if (rawRows.length > 3000) return { ok: false, errors: ["El archivo supera 3.000 controles."] };
+  const people = await getPeople();
+  const mapped = mapControlRows(rawRows, people.map((p) => ({ id: p.id, name: p.label, email: p.code })));
+  if (mapped.errors.length) return { ok: false, mapping: mapped.mapping, warnings: mapped.warnings, errors: mapped.errors };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("import_controls", { p_fields: mapped.fields, p_rows: mapped.rows, p_apply: apply });
+  if (error) return { ok: false, errors: [error.message || "No se pudo procesar el archivo."] };
+  if (apply) revalidatePath("/controles");
+  void fileName;
+  return { ok: true, mapping: mapped.mapping, warnings: mapped.warnings, summary: data as ImportPreview["summary"] };
 }
 
 export async function linkRequirement(formData: FormData) {

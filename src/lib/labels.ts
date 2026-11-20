@@ -37,7 +37,9 @@ export const IMPLEMENTATION = {
   implementado: "Implementado",
   no_aplica: "No aplica",
 } as const;
-export const RATINGS = { 1: "Deficiente", 2: "Aceptable", 3: "Fuerte" } as const;
+export const RATINGS = { 1: "Débil", 2: "Moderado", 3: "Fuerte" } as const;
+export const DOCUMENTATION = { documentado: "Documentado", sin_documentar: "Sin documentar" } as const;
+export const EVIDENCE = { con_registro: "Con registro", sin_registro: "Sin registro" } as const;
 export const DOC_TYPES = {
   politica: "Política",
   manual: "Manual",

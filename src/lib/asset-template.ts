@@ -199,7 +199,7 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
     "3. Usa las listas desplegables (tipo, estado, clasificación, responsable). Para confidencialidad, integridad y disponibilidad escribe un número de 1 a 5.",
     "4. Las columnas de identificador, IP y serial están en formato texto para que Excel no altere IMEI, documentos ni números con ceros a la izquierda. No las cambies a formato número.",
     "5. Puedes agregar columnas propias al final: se guardan como datos adicionales del activo.",
-    "6. En la plataforma ve a Activos → Importar Excel. Verás qué activos son nuevos, cuáles cambian y cuáles no vienen en el archivo antes de confirmar.",
+    "6. En la plataforma ve a Activos → Cargar desde Excel. Si el archivo tiene errores no se carga nada y verás qué corregir; corrígelo y vuelve a validarlo. Si está bien, verás qué activos son nuevos, cuáles cambian y cuáles no vienen antes de confirmar.",
     "7. Para la carga del mes siguiente parte de «Exportar inventario»: trae los identificadores asignados automáticamente y evita duplicados.",
   ].forEach((t) => line(t));
   blank();
