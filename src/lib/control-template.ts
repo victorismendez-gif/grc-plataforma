@@ -83,7 +83,7 @@ export function buildControlTemplate(input: {
     "1. Llena la hoja «Controles»: una fila por control. No cambies el nombre ni el orden de las columnas.",
     "2. El «ID» identifica cada control: si ya existe en la plataforma, la fila actualiza ese control; si no, lo crea.",
     "3. Usa las listas desplegables para Tipo, Clase, Periodicidad, Documentación, Evidencia, Diseño, Aplicación, Efectividad y Estado.",
-    "4. En la plataforma ve a Controles → Importar Excel. Verás qué controles son nuevos y cuáles cambian antes de confirmar. Si el archivo tiene errores no se carga nada: corrígelos y vuelve a validarlo.",
+    "4. En la plataforma ve a Controles → Cargar desde Excel. Verás qué controles son nuevos y cuáles cambian antes de confirmar. Si el archivo tiene errores no se carga nada: corrígelos y vuelve a validarlo.",
     "5. Para actualizar los controles existentes parte de «Exportar controles».",
   ].forEach((t) => line(t));
   ins.push([]);
