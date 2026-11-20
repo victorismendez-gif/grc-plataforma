@@ -9,29 +9,24 @@ import { CONTROL_NATURE, CONTROL_TYPES, DOCUMENTATION, EVIDENCE, FREQUENCIES, IM
 import { CONTROL_CODE_RE, defaultEffectiveness } from "@/lib/control-fields";
 import { mapControlRows } from "@/lib/control-import";
 import { getPeople } from "@/lib/lookups";
-import { normalize } from "@/lib/text";
+import { humanizeChanges, lookupNames, resolveImportProcesses, resolveProcess, resolveResponsible } from "@/lib/resolve";
 import type { ImportPreview } from "../activos/actions";
 
 async function controlRecord(fd: FormData) {
   const design = optLevel(fd, "design_rating");
   const application = optLevel(fd, "application_rating");
   // Responsable: si coincide con un usuario se enlaza; si no, se guarda el texto
-  const ownerText = str(fd, "owner").slice(0, 120);
-  let owner_id: string | null = null;
-  let owner_text: string | null = null;
-  if (ownerText) {
-    const people = await getPeople();
-    const n = normalize(ownerText);
-    const hit = people.find((p) => normalize(p.label) === n || normalize(p.code) === n);
-    if (hit) owner_id = hit.id;
-    else owner_text = ownerText;
-  }
+  const { id: owner_id, text: owner_text } = await resolveResponsible(str(fd, "owner"));
+  // Proceso: existente o nuevo (se crea en Estructura)
+  const proc = await resolveProcess(str(fd, "process"));
   return {
     code: str(fd, "code").replace(/\s+/g, "").slice(0, 30),
     name: str(fd, "name").slice(0, 200),
     description: optText(fd, "description", 5000),
     owner_id,
     owner_text,
+    process_id: proc.id,
+    process_error: proc.error ?? null,
     control_type: oneOf(fd, "control_type", keysOf(CONTROL_TYPES), "preventivo"),
     nature: oneOf(fd, "nature", keysOf(CONTROL_NATURE), "manual"),
     frequency: oneOf(fd, "frequency", keysOf(FREQUENCIES), "continuo"),
@@ -45,6 +40,7 @@ async function controlRecord(fd: FormData) {
 }
 
 function validControl(rec: Awaited<ReturnType<typeof controlRecord>>): string | null {
+  if (rec.process_error) return rec.process_error;
   if (!CONTROL_CODE_RE.test(rec.code)) return "El ID solo admite letras, números, punto, guion y guion bajo, sin espacios (máx. 30).";
   if (rec.name.length < 2) return "Escribe el nombre del control.";
   if (rec.documentation && !(rec.documentation in DOCUMENTATION)) return "Documentación no válida.";
@@ -57,10 +53,12 @@ export async function createControl(formData: FormData) {
   const rec = await controlRecord(formData);
   const problem = validControl(rec);
   if (problem) fail("/controles/nuevo", problem);
+  const { process_error: _pe, ...row } = rec;
+  void _pe;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("controls")
-    .insert({ ...rec, organization_id: ctx.organization.id })
+    .insert({ ...row, organization_id: ctx.organization.id })
     .select("id")
     .single();
   if (error || !data) fail("/controles/nuevo", error?.code === "23505" ? `Ya existe un control con el ID ${rec.code}.` : dbMessage(error, "No se pudo crear el control."));
@@ -75,8 +73,10 @@ export async function updateControl(formData: FormData) {
   const rec = await controlRecord(formData);
   const problem = validControl(rec);
   if (problem) fail(`/controles/${id}`, problem);
+  const { process_error: _pe, ...row } = rec;
+  void _pe;
   const supabase = await createClient();
-  const { error } = await supabase.from("controls").update(rec).eq("id", id);
+  const { error } = await supabase.from("controls").update(row).eq("id", id);
   if (error) fail(`/controles/${id}`, error.code === "23505" ? `Ya existe un control con el ID ${rec.code}.` : dbMessage(error, "No se pudo guardar."));
   revalidatePath("/controles");
   done(`/controles/${id}`, "Control actualizado.");
@@ -94,12 +94,22 @@ export async function processControlImport(
   const people = await getPeople();
   const mapped = mapControlRows(rawRows, people.map((p) => ({ id: p.id, name: p.label, email: p.code })));
   if (mapped.errors.length) return { ok: false, mapping: mapped.mapping, warnings: mapped.warnings, errors: mapped.errors };
+  const procs = await resolveImportProcesses(mapped.rows, apply);
+  if (procs.error) return { ok: false, mapping: mapped.mapping, errors: [procs.error] };
+  const warnings = [...mapped.warnings];
+  if (procs.created.length) {
+    warnings.unshift(`${apply ? "Se crearon" : "Se crearán"} ${procs.created.length} proceso(s) nuevo(s) en Estructura: ${procs.created.slice(0, 15).join(", ")}${procs.created.length > 15 ? "…" : ""}.`);
+  }
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("import_controls", { p_fields: mapped.fields, p_rows: mapped.rows, p_apply: apply });
   if (error) return { ok: false, errors: [error.message || "No se pudo procesar el archivo."] };
   if (apply) revalidatePath("/controles");
   void fileName;
-  return { ok: true, mapping: mapped.mapping, warnings: mapped.warnings, summary: data as ImportPreview["summary"] };
+  const summary = data as ImportPreview["summary"];
+  const names = await lookupNames();
+  for (const [k, v] of procs.names) names.set(k, v);
+  humanizeChanges(summary, names);
+  return { ok: true, mapping: mapped.mapping, warnings, summary };
 }
 
 export async function linkRequirement(formData: FormData) {

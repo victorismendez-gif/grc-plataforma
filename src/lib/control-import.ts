@@ -9,6 +9,7 @@ const ALIASES: Record<ControlField, string[]> = {
   name: ["control", "nombre", "nombredelcontrol", "nombrecontrol"],
   description: ["descripcion", "descripciondelcontrol", "detalle"],
   owner: ["responsable", "dueno", "propietario", "responsabledelcontrol"],
+  process: ["proceso", "procesoasociado", "macroproceso"],
   control_type: ["tipo", "tipodecontrol", "tipocontrol"],
   nature: ["clase", "naturaleza", "implementacion", "clasedecontrol"],
   frequency: ["periodicidad", "frecuencia"],
@@ -78,6 +79,7 @@ export function mapControlRows(raw: Record<string, unknown>[], people: Person[])
   for (const f of present) {
     if (f === "ignorada" || f === "code") continue;
     if (f === "owner") fields.add("owner_id").add("owner_text");
+    else if (f === "process") fields.add("process_id");
     else fields.add(f);
   }
   if (present.has("design_rating") && present.has("application_rating")) fields.add("effectiveness_rating");
@@ -112,9 +114,11 @@ export function mapControlRows(raw: Record<string, unknown>[], people: Person[])
           const hit = n ? people.find((p) => normalize(p.email) === n || normalize(p.name) === n) : undefined;
           out.owner_id = hit?.id ?? null;
           out.owner_text = hit ? null : s?.slice(0, 120) ?? null;
-          if (s && !hit) warnings.push(`Fila ${line}: «${s}» no es usuario de la plataforma; se guardó como texto.`);
           break;
         }
+        case "process":
+          out.process_name = s?.slice(0, 160) ?? null; // se resuelve en el servidor
+          break;
         default: {
           if (s === null) {
             out[field] = null;

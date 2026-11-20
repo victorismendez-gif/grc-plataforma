@@ -16,6 +16,7 @@ describe("plantilla de carga de activos", () => {
     const cols = templateColumns(input);
     expect(cols[0].header).toBe("Identificador único");
     expect(cols[1].header).toBe("Tipo de activo");
+    expect(cols.map((c) => c.header)).toContain("Proceso");
     const mapping = detectMapping(cols.map((c) => c.header));
     expect(Object.values(mapping)).not.toContain("attributes");
   });
@@ -28,6 +29,7 @@ describe("plantilla de carga de activos", () => {
     expect(v.some((x) => x.formula1 === "TiposActivo")).toBe(true);
     expect(v.filter((x) => x.type === "whole" && x.formula2 === "5")).toHaveLength(3);
     expect(wb.definedNames?.TiposActivo).toBe("Listas!$A$2:$A$2");
+    expect(v.some((x) => x.formula1 === "Procesos" && x.errorStyle === "warning")).toBe(true);
   });
 
   it("genera un archivo ZIP válido (firma PK y directorio central)", () => {

@@ -11,7 +11,7 @@ import {
 } from "@/lib/labels";
 
 export type ControlField =
-  | "code" | "name" | "description" | "owner" | "control_type" | "nature" | "frequency"
+  | "code" | "name" | "description" | "owner" | "process" | "control_type" | "nature" | "frequency"
   | "documentation" | "evidence" | "design_rating" | "application_rating" | "effectiveness_rating"
   | "implementation_status";
 
@@ -25,7 +25,7 @@ type Def = {
   width: number;
 };
 
-/** Orden solicitado: ID, Control, Descripción, Responsable, Tipo, Clase, Periodicidad,
+/** Orden solicitado: ID, Control, Descripción, Responsable, Proceso, Tipo, Clase, Periodicidad,
  *  Documentación, Evidencia, Diseño, Aplicación, Efectividad, Estado. */
 export const CONTROL_FIELDS: Def[] = [
   { field: "code", header: "ID", required: true, width: 14,
@@ -35,6 +35,8 @@ export const CONTROL_FIELDS: Def[] = [
     help: "Qué se hace, quién lo hace, cómo y con qué frecuencia, y qué pasa cuando se detecta una desviación." },
   { field: "owner", header: "Responsable", required: false, width: 28,
     help: "Correo o nombre del responsable. Si es usuario de la plataforma se enlaza a su cuenta; si no, se guarda el texto." },
+  { field: "process", header: "Proceso", required: false, width: 26,
+    help: "Proceso al que pertenece el control. Si no existe en la plataforma, se crea en Estructura." },
   { field: "control_type", header: "Tipo", required: true, width: 14, options: CONTROL_TYPES,
     help: "Momento en que actúa el control frente al riesgo.",
     definitions: {

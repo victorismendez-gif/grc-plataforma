@@ -14,6 +14,9 @@ const LABELS: Record<string, string> = {
   id_imei: "IMEI (identificador de celulares y tabletas)",
   id_documento: "Documento de identidad (identificador de empleados)",
   attributes: "Dato adicional",
+  owner_id: "Responsable (usuario)",
+  owner_text: "Responsable (texto)",
+  process_id: "Proceso",
 };
 
 export default async function ImportAssetsPage() {

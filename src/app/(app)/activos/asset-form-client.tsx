@@ -9,8 +9,9 @@ import {
 } from "@/lib/asset-profiles";
 import { ASSET_STATUS } from "@/lib/labels";
 import type { AssetTypeOption } from "@/lib/asset-lookups";
+import ComboField from "@/components/combo-field";
 
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; code?: string | null };
 
 export type AssetValues = {
   id?: string;
@@ -19,6 +20,8 @@ export type AssetValues = {
   asset_type_id?: string | null;
   description?: string | null;
   owner_id?: string | null;
+  owner_text?: string | null;
+  process_id?: string | null;
   custodian?: string | null;
   custodian_email?: string | null;
   location?: string | null;
@@ -41,16 +44,16 @@ type Props = {
   classes: Option[];
   people: Option[];
   processes: Option[];
-  processIds: string[];
   scale: ScaleLevel[];
   action: (fd: FormData) => Promise<void>;
   readOnly?: boolean;
 };
 
-export default function AssetFormClient({ asset, types, classes, people, processes, processIds, scale, action, readOnly }: Props) {
+export default function AssetFormClient({ asset, types, classes, people, processes, scale, action, readOnly }: Props) {
   const [typeId, setTypeId] = useState(asset?.asset_type_id ?? "");
   const type = useMemo(() => types.find((t) => t.id === typeId), [types, typeId]);
-  const selectedProcesses = new Set(processIds);
+  const ownerValue = asset?.owner_id ? people.find((p) => p.id === asset.owner_id)?.label ?? "" : asset?.owner_text ?? "";
+  const processValue = asset?.process_id ? processes.find((p) => p.id === asset.process_id)?.label ?? "" : "";
 
   return (
     <form action={action} className="stack">
@@ -99,14 +102,16 @@ export default function AssetFormClient({ asset, types, classes, people, process
                 />
               </label>
               {type.settings.fields.map((f) => (
-                <Field key={f} field={f} label={fieldLabel(f, type.settings)} asset={asset} people={people} />
+                <Field key={f} field={f} label={fieldLabel(f, type.settings)} asset={asset} people={people} ownerValue={ownerValue} />
               ))}
               </div>
             </fieldset>
 
             <fieldset className="form-section">
-              <legend>Clasificación y valoración</legend>
+              <legend>Proceso, clasificación y valoración</legend>
               <div className="form-grid">
+                <ComboField name="process" label="Proceso" value={processValue} options={processes}
+                  placeholder="Elige o escribe un proceso" title="Si escribes un proceso nuevo, se crea en Estructura." />
                 <label>
                   Clasificación de la información
                   <select name="classification_id" defaultValue={asset?.classification_id ?? ""}>
@@ -120,19 +125,6 @@ export default function AssetFormClient({ asset, types, classes, people, process
               </div>
             </fieldset>
 
-            {processes.length > 0 && (
-              <fieldset className="form-section">
-                <legend>Procesos que soporta</legend>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 18px" }}>
-                  {processes.map((p) => (
-                    <label key={p.id} className="check">
-                      <input type="checkbox" name="process_ids" value={p.id} defaultChecked={selectedProcesses.has(p.id)} />
-                      {p.label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
             {!readOnly && (
               <div>
                 <button type="submit">{asset?.id ? "Guardar cambios" : "Registrar activo"}</button>
@@ -145,7 +137,7 @@ export default function AssetFormClient({ asset, types, classes, people, process
   );
 }
 
-function Field({ field, label, asset, people }: { field: OptionalField; label: string; asset?: AssetValues; people: Option[] }) {
+function Field({ field, label, asset, people, ownerValue }: { field: OptionalField; label: string; asset?: AssetValues; people: Option[]; ownerValue: string }) {
   switch (field) {
     case "name":
       return (
@@ -164,15 +156,7 @@ function Field({ field, label, asset, people }: { field: OptionalField; label: s
         </label>
       );
     case "owner_id":
-      return (
-        <label>
-          {label}
-          <select name="owner_id" defaultValue={asset?.owner_id ?? ""}>
-            <option value="">—</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </label>
-      );
+      return <ComboField name="owner" label={label} value={ownerValue} options={people} placeholder="Elige o escribe un nombre" />;
     case "description":
       return (
         <label className="span-all">

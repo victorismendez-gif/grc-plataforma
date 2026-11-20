@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getCatalog } from "@/lib/lookups";
+import { getCatalog, getProcesses } from "@/lib/lookups";
 import { ASSET_CRITICALITY, ASSET_STATUS, label, level5Tone } from "@/lib/labels";
 import Flash from "@/components/flash";
 
@@ -15,14 +15,15 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
   const ctx = await requirePermission("assets.read");
   const sp = await searchParams;
   const supabase = await createClient();
-  const [types, classes] = await Promise.all([getCatalog("asset_type"), getCatalog("info_classification")]);
+  const [types, classes, processes] = await Promise.all([getCatalog("asset_type"), getCatalog("info_classification"), getProcesses()]);
+  const processName = new Map(processes.map((p) => [p.id, p.label]));
   const typeName = new Map(types.map((t) => [t.id, t.label]));
   const className = new Map(classes.map((c) => [c.id, c.label]));
 
   const page = Math.max(1, Number(sp.pagina) || 1);
   let q = supabase
     .from("assets")
-    .select("id, code, name, asset_type_id, classification_id, criticality, status, owner:profiles!assets_organization_id_owner_id_fkey(full_name)", { count: "exact" })
+    .select("id, code, name, asset_type_id, classification_id, criticality, status, process_id, owner_text, owner:profiles!assets_organization_id_owner_id_fkey(full_name)", { count: "exact" })
     .order("code");
   const isId = (v?: string) => !!v && /^[0-9a-f-]{36}$/.test(v);
   if (sp.q) {
@@ -30,6 +31,7 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
     if (term) q = q.or(`code.ilike.%${term}%,name.ilike.%${term}%,serial_number.ilike.%${term}%`);
   }
   if (isId(sp.tipo)) q = q.eq("asset_type_id", sp.tipo!);
+  if (isId(sp.proceso)) q = q.eq("process_id", sp.proceso!);
   if (isId(sp.clasificacion)) q = q.eq("classification_id", sp.clasificacion!);
   if (sp.estado && sp.estado in ASSET_STATUS) q = q.eq("status", sp.estado);
   if (["1", "2", "3", "4", "5"].includes(sp.criticidad ?? "")) q = q.eq("criticality", Number(sp.criticidad));
@@ -39,7 +41,7 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
   const [{ count: total }, { count: alta }, { count: sinDueno }, { count: sinClase }] = await Promise.all([
     supabase.from("assets").select("id", { count: "exact", head: true }).neq("status", "dado_de_baja"),
     supabase.from("assets").select("id", { count: "exact", head: true }).gte("criticality", 4).neq("status", "dado_de_baja"),
-    supabase.from("assets").select("id", { count: "exact", head: true }).is("owner_id", null).neq("status", "dado_de_baja"),
+    supabase.from("assets").select("id", { count: "exact", head: true }).is("owner_id", null).is("owner_text", null).neq("status", "dado_de_baja"),
     supabase.from("assets").select("id", { count: "exact", head: true }).is("classification_id", null).neq("status", "dado_de_baja"),
   ]);
 
@@ -81,6 +83,7 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
             <input name="q" defaultValue={sp.q ?? ""} placeholder="Identificador, nombre o serial" />
           </label>
           <Filter name="tipo" label="Tipo" value={sp.tipo} options={types.map((t) => [t.id, t.label])} />
+          <Filter name="proceso" label="Proceso" value={sp.proceso} options={processes.map((p) => [p.id, p.label])} />
           <Filter name="clasificacion" label="Clasificación" value={sp.clasificacion} options={classes.map((c) => [c.id, c.label])} />
           <Filter name="criticidad" label="Criticidad" value={sp.criticidad} options={Object.entries(ASSET_CRITICALITY)} />
           <Filter name="estado" label="Estado" value={sp.estado} options={Object.entries(ASSET_STATUS)} />
@@ -93,7 +96,7 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>Identificador</th><th>Nombre del activo</th><th>Tipo</th><th>Clasificación</th><th>Criticidad</th><th>Responsable</th><th>Estado</th></tr>
+              <tr><th>Identificador</th><th>Nombre del activo</th><th>Tipo</th><th>Proceso</th><th>Clasificación</th><th>Criticidad</th><th>Responsable</th><th>Estado</th></tr>
             </thead>
             <tbody>
               {(data ?? []).map((a) => (
@@ -101,13 +104,14 @@ export default async function AssetsPage({ searchParams }: { searchParams: Promi
                   <td className="mono"><Link href={`/activos/${a.id}`}>{a.code as string}</Link></td>
                   <td>{a.name as string}</td>
                   <td className="small">{typeName.get(a.asset_type_id as string) ?? "—"}</td>
+                  <td className="small">{processName.get(a.process_id as string) ?? "—"}</td>
                   <td className="small">{className.get(a.classification_id as string) ?? <span className="tag warn">Sin clasificar</span>}</td>
                   <td>{a.criticality ? <span className={`tag ${level5Tone(a.criticality as number)}`}>{a.criticality as number} · {label(ASSET_CRITICALITY, a.criticality)}</span> : "—"}</td>
-                  <td className="small">{(a.owner as unknown as { full_name: string } | null)?.full_name ?? "—"}</td>
+                  <td className="small">{(a.owner as unknown as { full_name: string } | null)?.full_name ?? (a.owner_text as string | null) ?? "—"}</td>
                   <td className="small">{label(ASSET_STATUS, a.status)}</td>
                 </tr>
               ))}
-              {(data ?? []).length === 0 && <tr><td colSpan={7} className="muted">No hay activos con esos filtros.</td></tr>}
+              {(data ?? []).length === 0 && <tr><td colSpan={8} className="muted">No hay activos con esos filtros.</td></tr>}
             </tbody>
           </table>
         </div>

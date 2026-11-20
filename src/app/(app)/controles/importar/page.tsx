@@ -10,6 +10,7 @@ const LABELS: Record<string, string> = {
   ...Object.fromEntries(CONTROL_FIELDS.map((d) => [d.field, d.header])),
   owner_id: "Responsable (usuario)",
   owner_text: "Responsable (texto)",
+  process_id: "Proceso",
 };
 
 export default async function ImportControlsPage() {

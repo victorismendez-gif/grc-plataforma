@@ -8,7 +8,7 @@ const people = [{ id: "p1", email: "ana@empresa.co", name: "Ana Ruiz" }];
 describe("campos de controles", () => {
   it("siguen el orden solicitado", () => {
     expect(CONTROL_FIELDS.map((d) => d.header)).toEqual([
-      "ID", "Control", "Descripción", "Responsable", "Tipo", "Clase", "Periodicidad",
+      "ID", "Control", "Descripción", "Responsable", "Proceso", "Tipo", "Clase", "Periodicidad",
       "Documentación", "Evidencia", "Diseño", "Aplicación", "Efectividad", "Estado",
     ]);
   });
@@ -39,10 +39,10 @@ describe("importación de controles", () => {
       implementation_status: "implementado",
     });
   });
-  it("guarda como texto al responsable que no es usuario", () => {
-    const { rows, warnings } = mapControlRows([{ ID: "C1", Control: "Ctl", Responsable: "Mesa de ayuda" }], people);
-    expect(rows[0]).toMatchObject({ owner_id: null, owner_text: "Mesa de ayuda" });
-    expect(warnings[0]).toMatch(/Mesa de ayuda/);
+  it("guarda como texto al responsable que no es usuario y lee el proceso", () => {
+    const { rows, fields } = mapControlRows([{ ID: "C1", Control: "Ctl", Responsable: "Mesa de ayuda", Proceso: "Gestión de TI" }], people);
+    expect(rows[0]).toMatchObject({ owner_id: null, owner_text: "Mesa de ayuda", process_name: "Gestión de TI" });
+    expect(fields).toContain("process_id");
   });
   it("reporta valores inválidos, ID con espacios, repetidos y columnas faltantes", () => {
     const r = mapControlRows(

@@ -8,6 +8,7 @@ export function buildControlTemplate(input: {
   orgName: string;
   brandColor?: string;
   people: { name: string; email: string }[];
+  processes?: string[];
   controls?: ControlRow[];
   generatedAt?: Date;
 }): Workbook {
@@ -19,6 +20,7 @@ export function buildControlTemplate(input: {
   const lists: { name: string; values: string[] }[] = [
     ...listDefs.map((d) => ({ name: d.field, values: Object.values(d.options!) })),
     { name: "owner", values: input.people.map((p) => p.email).filter(Boolean) },
+    { name: "process", values: input.processes ?? [] },
   ];
   const maxLen = Math.max(1, ...lists.map((l) => l.values.length));
   const listRows: Cell[][] = [lists.map((l) => l.name)];
@@ -47,6 +49,11 @@ export function buildControlTemplate(input: {
     validations.push({ sqref: range("owner"), type: "list", formula1: "Lista_owner", errorStyle: "warning", promptTitle: "Responsable",
       prompt: "Correo de un usuario de la plataforma o nombre del responsable.", errorTitle: "Responsable",
       error: "No es usuario de la plataforma; se guardará como texto." });
+  }
+  if (input.processes?.length) {
+    validations.push({ sqref: range("process"), type: "list", formula1: "Lista_process", errorStyle: "warning", promptTitle: "Proceso",
+      prompt: "Elige un proceso o escribe uno nuevo (se creará en Estructura).", errorTitle: "Proceso nuevo",
+      error: "Ese proceso no existe todavía; se creará al cargar el archivo." });
   }
   const rows: Cell[][] = [
     defs.map((d) => ({ v: d.header, s: STYLE.header })),
@@ -82,7 +89,7 @@ export function buildControlTemplate(input: {
   [
     "1. Llena la hoja «Controles»: una fila por control. No cambies el nombre ni el orden de las columnas.",
     "2. El «ID» identifica cada control: si ya existe en la plataforma, la fila actualiza ese control; si no, lo crea.",
-    "3. Usa las listas desplegables para Tipo, Clase, Periodicidad, Documentación, Evidencia, Diseño, Aplicación, Efectividad y Estado.",
+    "3. Responsable y Proceso son editables: elige de la lista o escribe un valor nuevo (un proceso nuevo se crea en Estructura). Usa las listas desplegables para Tipo, Clase, Periodicidad, Documentación, Evidencia, Diseño, Aplicación, Efectividad y Estado.",
     "4. En la plataforma ve a Controles → Cargar desde Excel. Verás qué controles son nuevos y cuáles cambian antes de confirmar. Si el archivo tiene errores no se carga nada: corrígelos y vuelve a validarlo.",
     "5. Para actualizar los controles existentes parte de «Exportar controles».",
   ].forEach((t) => line(t));

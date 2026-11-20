@@ -16,7 +16,7 @@ type MappedField =
   | "code" | "id_placa" | "id_imei" | "id_documento"
   | "asset_type_id" | "name" | "ip_address" | "status" | "brand" | "model" | "operating_system" | "serial_number"
   | "owner_id" | "custodian" | "custodian_email" | "location" | "acquired_on" | "description"
-  | "classification_id" | "confidentiality" | "integrity" | "availability";
+  | "process_id" | "classification_id" | "confidentiality" | "integrity" | "availability";
 
 /** Encabezados aceptados (normalizados, sin el texto entre paréntesis). */
 const HEADER_ALIASES: Record<MappedField, string[]> = {
@@ -38,6 +38,7 @@ const HEADER_ALIASES: Record<MappedField, string[]> = {
   location: ["ubicacion", "ubicacionfisica", "lugar"],
   acquired_on: ["fechaadquisicion", "fechadeadquisicion", "fechacompra", "fechadecompra"],
   description: ["descripcion", "detalle"],
+  process_id: ["proceso", "procesoquesoporta", "procesoasociado", "macroproceso"],
   classification_id: ["clasificacion", "clasificaciondelainformacion", "nivelclasificacion"],
   confidentiality: ["confidencialidad", "c"],
   integrity: ["integridad", "i"],
@@ -217,22 +218,25 @@ export function mapAssetRows(raw: Record<string, unknown>[], lookups: Lookups): 
           out.ip_address = s;
           break;
         }
-        case "classification_id":
-        case "owner_id": {
+        case "classification_id": {
           const s = asText(value);
-          const list = field === "classification_id" ? lookups.classifications : lookups.profiles;
-          const hit = s ? findLookup(list, s) : undefined;
-          out[field] = hit?.id ?? null;
-          if (s && !hit) {
-            if (field === "classification_id") {
-              errors.push(`Fila ${line}: la clasificación «${s}» no existe. Use: ${lookups.classifications.map((c) => c.label).join(", ")}.`);
-            } else {
-              attributes["Responsable original"] = s;
-              warnings.push(`Fila ${line}: el responsable «${s}» no es un usuario de la plataforma; se guardó como dato adicional.`);
-            }
-          }
+          const hit = s ? findLookup(lookups.classifications, s) : undefined;
+          out.classification_id = hit?.id ?? null;
+          if (s && !hit) errors.push(`Fila ${line}: la clasificación «${s}» no existe. Use: ${lookups.classifications.map((c) => c.label).join(", ")}.`);
           break;
         }
+        case "owner_id": {
+          // Responsable editable: usuario de la plataforma o texto libre
+          const s = asText(value)?.slice(0, 120) ?? null;
+          const hit = s ? findLookup(lookups.profiles, s) : undefined;
+          out.owner_id = hit?.id ?? null;
+          out.owner_text = hit ? null : s;
+          break;
+        }
+        case "process_id":
+          // Se resuelve en el servidor (existente o nuevo)
+          out.process_name = asText(value)?.slice(0, 160) ?? null;
+          break;
         case "confidentiality":
         case "integrity":
         case "availability": {
@@ -287,5 +291,6 @@ export function mapAssetRows(raw: Record<string, unknown>[], lookups: Lookups): 
     );
   }
   realFields.add("asset_type_id");
+  if (realFields.has("owner_id")) realFields.add("owner_text");
   return { mapping, fields: [...realFields], rows, warnings: warnings.slice(0, 200), errors: errors.slice(0, 200), autoCodes };
 }

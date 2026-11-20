@@ -96,6 +96,7 @@ describe("importación de activos", () => {
       classification_id: "c-int",
       status: "en_reparacion",
       owner_id: "p-1",
+      owner_text: null,
       acquired_on: "2024-03-15",
     });
     const e = res.errors.join(" ");
@@ -116,6 +117,17 @@ describe("importación de activos", () => {
     );
     expect(res.rows[0]).toMatchObject({ custodian: "Mesa de ayuda", custodian_email: "mesa@empresa.co" });
     expect(res.errors.join(" ")).toMatch(/«mesa de ayuda» no es un correo válido/);
+  });
+
+  it("guarda el responsable que no es usuario como texto y lee el proceso", () => {
+    const res = mapAssetRows(
+      [{ "Identificador único": "R1", "Tipo de activo": "Repositorio", Responsable: "Jefe de compras", Proceso: "Compras" }],
+      lookups,
+    );
+    expect(res.errors).toEqual([]);
+    expect(res.rows[0]).toMatchObject({ owner_id: null, owner_text: "Jefe de compras", process_name: "Compras" });
+    expect(res.fields).toEqual(expect.arrayContaining(["owner_id", "owner_text", "process_id"]));
+    expect(res.rows[0]).not.toHaveProperty("attributes");
   });
 
   it("rechaza tipos desconocidos e identificadores repetidos", () => {

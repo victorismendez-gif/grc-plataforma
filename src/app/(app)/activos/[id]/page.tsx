@@ -20,7 +20,7 @@ export default async function AssetPage({ params, searchParams }: Props) {
   const supabase = await createClient();
   const { data: asset } = await supabase
     .from("assets")
-    .select("*, asset_processes(process_id), control_assets(control:controls(id, code, name, implementation_status))")
+    .select("*, control_assets(control:controls(id, code, name, implementation_status))")
     .eq("id", id)
     .maybeSingle();
   if (!asset) notFound();
@@ -50,7 +50,6 @@ export default async function AssetPage({ params, searchParams }: Props) {
       <section className="panel">
         <AssetForm
           asset={asset as AssetData}
-          processIds={((asset.asset_processes as { process_id: string }[]) ?? []).map((p) => p.process_id)}
           action={updateAsset}
           readOnly={!ctx.can("assets.write")}
         />

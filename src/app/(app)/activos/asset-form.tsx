@@ -7,12 +7,10 @@ export type AssetData = AssetValues & { id: string; code: string; name: string; 
 /** Carga los catálogos en el servidor y entrega el formulario dinámico. */
 export default async function AssetForm({
   asset,
-  processIds = [],
   action,
   readOnly,
 }: {
   asset?: AssetData;
-  processIds?: string[];
   action: (fd: FormData) => Promise<void>;
   readOnly?: boolean;
 }) {
@@ -30,7 +28,6 @@ export default async function AssetForm({
       classes={classes}
       people={people}
       processes={processes}
-      processIds={processIds}
       scale={scale}
       action={action}
       readOnly={readOnly}

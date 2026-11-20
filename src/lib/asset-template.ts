@@ -19,6 +19,7 @@ export type TemplateInput = {
   classifications: string[];
   scale: ScaleLevel[];
   people: { name: string; email: string }[];
+  processes?: string[];
   assets?: TemplateAsset[];
   generatedAt?: Date;
 };
@@ -39,6 +40,7 @@ export type TemplateAsset = {
   location: string | null;
   acquired_on: string | null;
   description: string | null;
+  process: string | null;
   classification: string | null;
   confidentiality: number | null;
   integrity: number | null;
@@ -81,8 +83,8 @@ export function templateColumns(input: Pick<TemplateInput, "classifications" | "
     { key: "serial_number", header: "Serial", width: 20, style: STYLE.text, required: "No",
       help: "Número de serie del fabricante. En servidores el serial va en «Identificador único».", allowed: "Texto." },
     { key: "owner_email", header: "Responsable", width: 30, required: "No",
-      help: "Correo o nombre del usuario de la plataforma responsable del activo. Si la persona aún no es usuaria, el dato se guarda como información adicional.",
-      allowed: "Lista desplegable de usuarios (se acepta otro correo con advertencia)." },
+      help: "Responsable del activo. Elige un usuario de la lista o escribe cualquier nombre: si coincide con un usuario se enlaza a su cuenta; si no, se guarda el texto.",
+      allowed: "Lista de usuarios o texto libre (máx. 120 caracteres)." },
     { key: "custodian", header: "Custodio", width: 22, required: "No",
       help: "Persona o área que tiene el activo bajo su cuidado (por ejemplo Mesa de ayuda).", allowed: "Texto." },
     { key: "custodian_email", header: "Correo custodio", width: 30, required: "No",
@@ -91,6 +93,9 @@ export function templateColumns(input: Pick<TemplateInput, "classifications" | "
     { key: "acquired_on", header: "Fecha de adquisición (AAAA-MM-DD)", width: 18, style: STYLE.date, required: "No",
       help: "Fecha de compra o de alta.", allowed: "Fecha, por ejemplo 2026-03-15." },
     { key: "description", header: "Descripción", width: 36, required: "No", help: "Información relevante del activo.", allowed: "Texto." },
+    { key: "process", header: "Proceso", width: 26, required: "Recomendado",
+      help: "Proceso al que pertenece o que soporta el activo. Elige uno de la lista o escribe uno nuevo: se crea en Estructura al cargar el archivo.",
+      allowed: "Lista de procesos o texto libre." },
     { key: "classification", header: "Clasificación de la información", width: 22, required: "Recomendado",
       help: "Nivel de clasificación según la política de la organización.", allowed: input.classifications.join(", ") },
     ...(Object.keys(DIMENSIONS) as (keyof typeof DIMENSIONS)[]).map((d): Column => ({
@@ -114,8 +119,9 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
   const col = (key: Column["key"]) => colName(cols.findIndex((c) => c.key === key));
 
   // ---------------- Listas (oculta) ----------------
-  const lists: string[][] = [typeLabels, statusLabels, input.classifications, emails.length ? emails : [""]];
-  const listRows: Cell[][] = [["Tipos de activo", "Estados", "Clasificación", "Responsables"]];
+  const processes = input.processes ?? [];
+  const lists: string[][] = [typeLabels, statusLabels, input.classifications, emails.length ? emails : [""], processes.length ? processes : [""]];
+  const listRows: Cell[][] = [["Tipos de activo", "Estados", "Clasificación", "Responsables", "Procesos"]];
   const maxLen = Math.max(...lists.map((l) => l.length));
   for (let i = 0; i < maxLen; i++) listRows.push(lists.map((l) => (l[i] ? { v: l[i], s: STYLE.text } : null)));
   const listsSheet: Sheet = { name: "Listas", rows: listRows, hidden: true, columns: lists.map(() => ({ width: 30 })) };
@@ -125,6 +131,7 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
     EstadosActivo: ref(1, statusLabels.length),
     ClasificacionInformacion: ref(2, input.classifications.length),
     Responsables: ref(3, Math.max(1, emails.length)),
+    Procesos: ref(4, Math.max(1, processes.length)),
   };
 
   // ---------------- Activos ----------------
@@ -151,7 +158,9 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
     { sqref: range("classification"), type: "list", formula1: "ClasificacionInformacion", promptTitle: "Clasificación",
       prompt: "Nivel de clasificación de la información según la política.", errorTitle: "Clasificación no válida", error: "Elige un valor de la lista." },
     { sqref: range("owner_email"), type: "list", formula1: "Responsables", errorStyle: "warning", promptTitle: "Responsable",
-      prompt: "Correo o nombre de un usuario de la plataforma.", errorTitle: "Responsable", error: "Ese correo no es un usuario de la plataforma. Se guardará como dato adicional." },
+      prompt: "Elige un usuario o escribe el nombre del responsable.", errorTitle: "Responsable", error: "No es usuario de la plataforma; se guardará como texto." },
+    { sqref: range("process"), type: "list", formula1: "Procesos", errorStyle: "warning", promptTitle: "Proceso",
+      prompt: "Elige un proceso o escribe uno nuevo (se creará en Estructura).", errorTitle: "Proceso nuevo", error: "Ese proceso no existe todavía; se creará al cargar el archivo." },
     ...(Object.keys(DIMENSIONS) as (keyof typeof DIMENSIONS)[]).map((d): Validation => ({
       sqref: range(d), type: "whole", formula1: "1", formula2: "5", promptTitle: DIMENSIONS[d],
       prompt: input.scale.filter((s) => s.dimension === d).map((s) => `${s.level} ${s.label}`).join(" · ").slice(0, 250) || "Valor de 1 a 5",
@@ -202,7 +211,7 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
   [
     "1. Llena la hoja «Activos»: una fila por activo. No cambies el nombre ni el orden de las columnas.",
     "2. Empieza siempre por el «Identificador único» y el «Tipo de activo»: el tipo define qué identificador se exige y qué campos aplican.",
-    "3. Usa las listas desplegables (tipo, estado, clasificación, responsable). Para confidencialidad, integridad y disponibilidad escribe un número de 1 a 5.",
+    "3. Usa las listas desplegables (tipo, estado, clasificación). «Responsable» y «Proceso» son editables: elige de la lista o escribe un valor nuevo (un proceso nuevo se crea en Estructura). Para confidencialidad, integridad y disponibilidad escribe un número de 1 a 5.",
     "4. Las columnas de identificador, IP y serial están en formato texto para que Excel no altere IMEI, documentos ni números con ceros a la izquierda. No las cambies a formato número.",
     "5. Puedes agregar columnas propias al final: se guardan como datos adicionales del activo.",
     "6. En la plataforma ve a Activos → Cargar desde Excel. Si el archivo tiene errores no se carga nada y verás qué corregir; corrígelo y vuelve a validarlo. Si está bien, verás qué activos son nuevos, cuáles cambian y cuáles no vienen antes de confirmar.",
@@ -220,7 +229,7 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
   input.types.forEach((t) => {
     const s = readSettings(t.settings);
     const fields = OPTIONAL_FIELDS.filter((f) => s.fields.includes(f)).map((f) => fieldLabel(f, s));
-    const always = ["Clasificación de la información", "Confidencialidad", "Integridad", "Disponibilidad"];
+    const always = ["Proceso", "Clasificación de la información", "Confidencialidad", "Integridad", "Disponibilidad"];
     ins.push([
       { v: t.label, s: STYLE.cell },
       { v: `${s.identifier.label} (${s.identifier.required ? "obligatorio" : "opcional: si falta se asigna un número aleatorio"})`, s: STYLE.cell },

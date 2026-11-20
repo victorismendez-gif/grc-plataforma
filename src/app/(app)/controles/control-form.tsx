@@ -1,4 +1,5 @@
-import { getPeople } from "@/lib/lookups";
+import { getPeople, getProcesses } from "@/lib/lookups";
+import ComboField from "@/components/combo-field";
 import { CONTROL_FIELDS, type ControlField } from "@/lib/control-fields";
 
 export type ControlData = {
@@ -8,6 +9,7 @@ export type ControlData = {
   description: string | null;
   owner_id: string | null;
   owner_text: string | null;
+  process_id: string | null;
   control_type: string;
   nature: string;
   frequency: string;
@@ -30,7 +32,8 @@ export default async function ControlForm({
   action: (fd: FormData) => Promise<void>;
   readOnly?: boolean;
 }) {
-  const people = await getPeople();
+  const [people, processes] = await Promise.all([getPeople(), getProcesses()]);
+  const processValue = control?.process_id ? processes.find((p) => p.id === control.process_id)?.label ?? "" : "";
   const ownerValue = control?.owner_id ? people.find((p) => p.id === control.owner_id)?.label ?? "" : control?.owner_text ?? "";
   const def = (f: ControlField) => CONTROL_FIELDS.find((d) => d.field === f)!;
   const value = (f: ControlField): string => {
@@ -72,13 +75,8 @@ export default async function ControlForm({
               Control *
               <input name="name" defaultValue={control?.name ?? ""} required minLength={2} maxLength={200} />
             </label>
-            <label title={def("owner").help}>
-              Responsable
-              <input name="owner" defaultValue={ownerValue} list="responsables" maxLength={120} placeholder="Usuario o nombre" />
-              <datalist id="responsables">
-                {people.map((p) => <option key={p.id} value={p.label}>{p.code}</option>)}
-              </datalist>
-            </label>
+            <ComboField name="owner" label="Responsable" value={ownerValue} options={people} title={def("owner").help} placeholder="Elige o escribe un nombre" />
+            <ComboField name="process" label="Proceso" value={processValue} options={processes} title={def("process").help} placeholder="Elige o escribe un proceso" />
             <label className="span-all" title={def("description").help}>
               Descripción
               <textarea name="description" defaultValue={control?.description ?? ""} rows={3} maxLength={5000}

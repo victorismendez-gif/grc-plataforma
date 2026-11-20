@@ -6,14 +6,19 @@ import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
 import { oneOf, optInt, optText, optUuid } from "@/lib/forms-parse";
 import { DOC_TYPES, keysOf } from "@/lib/labels";
+import { resolveProcess, resolveResponsible } from "@/lib/resolve";
 
-function docRecord(fd: FormData) {
+async function docRecord(fd: FormData) {
+  const owner = await resolveResponsible(str(fd, "owner"));
+  const proc = await resolveProcess(str(fd, "process"));
   return {
+    process_error: proc.error ?? null,
     title: str(fd, "title").slice(0, 250),
     doc_type: oneOf(fd, "doc_type", keysOf(DOC_TYPES), "procedimiento"),
     description: optText(fd, "description"),
-    process_id: optUuid(fd, "process_id"),
-    owner_id: optUuid(fd, "owner_id"),
+    process_id: proc.id,
+    owner_id: owner.id,
+    owner_text: owner.text,
     classification_id: optUuid(fd, "classification_id"),
     review_months: optInt(fd, "review_months", 1, 60) ?? 12,
     requires_acknowledgment: fd.get("requires_acknowledgment") === "on",
@@ -23,7 +28,8 @@ function docRecord(fd: FormData) {
 export async function createDocument(formData: FormData) {
   const ctx = await requirePermission("documents.write");
   const code = str(formData, "code").replace(/\s+/g, "").slice(0, 40);
-  const rec = docRecord(formData);
+  const { process_error, ...rec } = await docRecord(formData);
+  if (process_error) fail("/documentos", process_error);
   if (!/^[A-Za-z0-9._-]{1,40}$/.test(code) || rec.title.length < 2) fail("/documentos", "Escribe un código (sin espacios) y un título.");
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -41,7 +47,8 @@ export async function updateDocument(formData: FormData) {
   await requirePermission("documents.write");
   const id = optUuid(formData, "id");
   if (!id) fail("/documentos", "Documento no válido.");
-  const rec = docRecord(formData);
+  const { process_error, ...rec } = await docRecord(formData);
+  if (process_error) fail(`/documentos/${id}`, process_error);
   if (rec.title.length < 2) fail(`/documentos/${id}`, "El título es obligatorio.");
   const supabase = await createClient();
   const { error } = await supabase.from("documents").update(rec).eq("id", id);

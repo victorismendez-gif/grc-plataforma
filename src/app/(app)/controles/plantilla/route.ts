@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionState } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getPeople } from "@/lib/lookups";
+import { getPeople, getProcesses } from "@/lib/lookups";
 import { buildControlTemplate, type ControlRow } from "@/lib/control-template";
 import { buildXlsx } from "@/lib/xlsx-writer";
 import { CONTROL_FIELDS } from "@/lib/control-fields";
@@ -17,19 +17,20 @@ export async function GET(request: NextRequest) {
   }
   const ctx = state.ctx;
   const withData = request.nextUrl.searchParams.get("datos") === "1";
-  const people = await getPeople();
+  const [people, processes] = await Promise.all([getPeople(), getProcesses()]);
 
   let controls: ControlRow[] | undefined;
   if (withData) {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("controls")
-      .select("code, name, description, owner_id, owner_text, control_type, nature, frequency, documentation, evidence, design_rating, application_rating, effectiveness_rating, implementation_status")
+      .select("code, name, description, owner_id, owner_text, process_id, control_type, nature, frequency, documentation, evidence, design_rating, application_rating, effectiveness_rating, implementation_status")
       .eq("active", true)
       .order("code")
       .limit(3000);
     if (error) return NextResponse.json({ error: "No se pudo exportar" }, { status: 500 });
     const email = new Map(people.map((p) => [p.id, p.code ?? p.label]));
+    const processName = new Map(processes.map((p) => [p.id, p.label]));
     const opt = (field: string, v: unknown) => {
       if (v === null || v === undefined) return null;
       const d = CONTROL_FIELDS.find((x) => x.field === field);
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
       name: c.name as string,
       description: c.description as string | null,
       owner: c.owner_id ? email.get(c.owner_id as string) ?? null : (c.owner_text as string | null),
+      process: c.process_id ? processName.get(c.process_id as string) ?? null : null,
       control_type: opt("control_type", c.control_type),
       nature: opt("nature", c.nature),
       frequency: opt("frequency", c.frequency),
@@ -58,6 +60,7 @@ export async function GET(request: NextRequest) {
       orgName: ctx.organization.name,
       brandColor: ctx.organization.brand_color,
       people: people.map((p) => ({ name: p.label, email: p.code ?? "" })).filter((p) => p.email),
+      processes: processes.map((p) => p.label),
       controls,
     }),
   );

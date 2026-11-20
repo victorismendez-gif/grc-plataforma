@@ -10,6 +10,7 @@ import { ASSET_STATUS, keysOf } from "@/lib/labels";
 import { mapAssetRows } from "@/lib/asset-import";
 import { getCatalog, getPeople } from "@/lib/lookups";
 import { getAssetTypes, getScale } from "@/lib/asset-lookups";
+import { humanizeChanges, lookupNames, resolveImportProcesses, resolveProcess, resolveResponsible } from "@/lib/resolve";
 
 /** Solo incluye los campos que el formulario envió (los ocultos por el tipo no se tocan). */
 function assetRecord(fd: FormData): { record: Record<string, unknown>; error?: string } {
@@ -23,7 +24,6 @@ function assetRecord(fd: FormData): { record: Record<string, unknown>; error?: s
     r.name = name || null;
   }
   if (has("description")) r.description = optText(fd, "description");
-  if (has("owner_id")) r.owner_id = optUuid(fd, "owner_id");
   if (has("custodian")) r.custodian = optText(fd, "custodian", 200);
   if (has("custodian_email")) {
     const email = str(fd, "custodian_email").toLowerCase();
@@ -64,6 +64,8 @@ export async function createAsset(formData: FormData) {
   const { record, error: formError } = assetRecord(formData);
   if (formError) fail("/activos/nuevo", formError);
   if (!record.asset_type_id) fail("/activos/nuevo", "Selecciona el tipo de activo.");
+  const linkError = await linkFields(formData, record);
+  if (linkError) fail("/activos/nuevo", linkError);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("assets")
@@ -71,7 +73,6 @@ export async function createAsset(formData: FormData) {
     .select("id, code")
     .single();
   if (error || !data) fail("/activos/nuevo", assetDbMessage(error));
-  await saveAssetProcesses(data.id as string, formData, ctx.organization.id);
   revalidatePath("/activos");
   redirect(`/activos/${data.id}?ok=${encodeURIComponent(`Activo ${data.code} registrado.`)}`);
 }
@@ -85,24 +86,28 @@ export async function updateAsset(formData: FormData) {
   if (formError) fail(path, formError);
   if (!record.asset_type_id) fail(path, "Selecciona el tipo de activo.");
   if (record.code === null) delete record.code; // conserva el identificador actual
+  const linkError = await linkFields(formData, record);
+  if (linkError) fail(path, linkError);
   const supabase = await createClient();
   const { error } = await supabase.from("assets").update(record).eq("id", id);
   if (error) fail(path, assetDbMessage(error));
-  await saveAssetProcesses(id, formData, ctx.organization.id);
   revalidatePath("/activos");
   done(path, "Cambios guardados.");
 }
 
-async function saveAssetProcesses(assetId: string, formData: FormData, orgId: string) {
-  const wanted = formData.getAll("process_ids").map(String).filter(isUuid);
-  const supabase = await createClient();
-  const { data: current } = await supabase.from("asset_processes").select("process_id").eq("asset_id", assetId);
-  const have = new Set((current ?? []).map((r) => r.process_id as string));
-  const toRemove = [...have].filter((p) => !wanted.includes(p));
-  const toAdd = wanted.filter((p) => !have.has(p));
-  if (toRemove.length) await supabase.from("asset_processes").delete().eq("asset_id", assetId).in("process_id", toRemove);
-  if (toAdd.length)
-    await supabase.from("asset_processes").insert(toAdd.map((process_id) => ({ organization_id: orgId, asset_id: assetId, process_id })));
+/** Responsable (usuario o texto) y proceso (existente o nuevo). */
+async function linkFields(fd: FormData, record: Record<string, unknown>): Promise<string | null> {
+  if (fd.has("owner")) {
+    const owner = await resolveResponsible(fd.get("owner")?.toString());
+    record.owner_id = owner.id;
+    record.owner_text = owner.text;
+  }
+  if (fd.has("process")) {
+    const proc = await resolveProcess(fd.get("process")?.toString());
+    if (proc.error) return proc.error;
+    record.process_id = proc.id;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------
@@ -154,6 +159,13 @@ export async function processAssetImport(
   });
   if (mapped.errors.length) return { ok: false, mapping: mapped.mapping, warnings: mapped.warnings, errors: mapped.errors };
 
+  const procs = await resolveImportProcesses(mapped.rows, apply);
+  if (procs.error) return { ok: false, mapping: mapped.mapping, errors: [procs.error] };
+  const warnings = [...mapped.warnings];
+  if (procs.created.length) {
+    warnings.unshift(`${apply ? "Se crearon" : "Se crearán"} ${procs.created.length} proceso(s) nuevo(s) en Estructura: ${procs.created.slice(0, 15).join(", ")}${procs.created.length > 15 ? "…" : ""}.`);
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("import_assets", {
     p_file_name: String(fileName).slice(0, 200),
@@ -163,5 +175,9 @@ export async function processAssetImport(
   });
   if (error) return { ok: false, mapping: mapped.mapping, message: error.message || "No se pudo procesar el archivo." };
   if (apply) revalidatePath("/activos");
-  return { ok: true, mapping: mapped.mapping, warnings: mapped.warnings, summary: data as ImportPreview["summary"] };
+  const summary = data as ImportPreview["summary"];
+  const names = await lookupNames([assetTypes.map((t) => ({ id: t.id, label: t.label })), classifications]);
+  for (const [k, v] of procs.names) names.set(k, v);
+  humanizeChanges(summary, names);
+  return { ok: true, mapping: mapped.mapping, warnings, summary };
 }

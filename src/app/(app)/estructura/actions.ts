@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
 import { oneOf, optInt, optText, optUuid } from "@/lib/forms-parse";
 import { keysOf, PROCESS_TYPES, UNIT_TYPES } from "@/lib/labels";
+import { resolveResponsible } from "@/lib/resolve";
 
 const PATH = "/estructura";
 
@@ -13,13 +14,15 @@ export async function saveUnit(formData: FormData) {
   const id = optUuid(formData, "id");
   const name = str(formData, "name");
   if (name.length < 2) fail(PATH, "El nombre de la unidad debe tener al menos 2 caracteres.");
+  const manager = await resolveResponsible(str(formData, "manager"));
   const record = {
     name,
     code: optText(formData, "code", 30),
     unit_type: oneOf(formData, "unit_type", keysOf(UNIT_TYPES), "area"),
     parent_id: optUuid(formData, "parent_id"),
     employees: optInt(formData, "employees", 0, 1_000_000),
-    manager_id: optUuid(formData, "manager_id"),
+    manager_id: manager.id,
+    manager_text: manager.text,
   };
   const supabase = await createClient();
   const { error } = id
@@ -46,11 +49,13 @@ export async function saveProcess(formData: FormData) {
   const id = optUuid(formData, "id");
   const name = str(formData, "name");
   if (name.length < 2) fail(PATH, "El nombre del proceso debe tener al menos 2 caracteres.");
+  const owner = await resolveResponsible(str(formData, "owner"));
   const record = {
     name,
     code: optText(formData, "code", 30),
     process_type: oneOf(formData, "process_type", keysOf(PROCESS_TYPES), "apoyo"),
-    owner_id: optUuid(formData, "owner_id"),
+    owner_id: owner.id,
+    owner_text: owner.text,
     description: optText(formData, "description"),
   };
   const supabase = await createClient();

@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { DOC_TYPES, label, VERSION_STATUS } from "@/lib/labels";
 import Flash from "@/components/flash";
+import { getProcesses } from "@/lib/lookups";
 import DocForm from "./doc-form";
 import { createDocument } from "./actions";
 
@@ -17,6 +18,9 @@ type Row = {
   doc_type: string;
   next_review_on: string | null;
   active: boolean;
+  process_id: string | null;
+  owner_text: string | null;
+  owner: { full_name: string } | null;
   current: { version_no: number; published_at: string } | null;
   document_versions: { status: string; version_no: number }[];
 };
@@ -25,9 +29,10 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const ctx = await requirePermission("documents.read");
   const sp = await searchParams;
   const supabase = await createClient();
+  const processName = new Map((await getProcesses()).map((p) => [p.id, p.label]));
   let q = supabase
     .from("documents")
-    .select("id, code, title, doc_type, next_review_on, active, current:document_versions!documents_current_version_fkey(version_no, published_at), document_versions!document_versions_organization_id_document_id_fkey(status, version_no)")
+    .select("id, code, title, doc_type, next_review_on, active, process_id, owner_text, owner:profiles!documents_organization_id_owner_id_fkey(full_name), current:document_versions!documents_current_version_fkey(version_no, published_at), document_versions!document_versions_organization_id_document_id_fkey(status, version_no)")
     .order("code");
   if (sp.tipo && sp.tipo in DOC_TYPES) q = q.eq("doc_type", sp.tipo);
   if (sp.q) {
@@ -69,7 +74,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
         </form>
         <div className="tablewrap">
           <table>
-            <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Vigente</th><th>En curso</th><th>Próxima revisión</th></tr></thead>
+            <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Proceso</th><th>Responsable</th><th>Vigente</th><th>En curso</th><th>Próxima revisión</th></tr></thead>
             <tbody>
               {rows.map((d) => {
                 const open = d.document_versions.find((v) => !["publicado", "obsoleto"].includes(v.status));
@@ -79,13 +84,15 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                     <td className="mono"><Link href={`/documentos/${d.id}`}>{d.code}</Link></td>
                     <td>{d.title} {!d.active && <span className="tag crit">Inactivo</span>}</td>
                     <td className="small">{label(DOC_TYPES, d.doc_type)}</td>
+                    <td className="small">{(d.process_id && processName.get(d.process_id)) || "—"}</td>
+                    <td className="small">{d.owner?.full_name ?? d.owner_text ?? "—"}</td>
                     <td>{d.current ? <span className="tag good">v{d.current.version_no}</span> : <span className="muted small">Sin publicar</span>}</td>
                     <td className="small">{open ? `v${open.version_no} · ${label(VERSION_STATUS, open.status)}` : "—"}</td>
                     <td className="small">{d.next_review_on ? <span className={overdue ? "tag crit" : ""}>{d.next_review_on}</span> : "—"}</td>
                   </tr>
                 );
               })}
-              {rows.length === 0 && <tr><td colSpan={6} className="muted">Aún no hay documentos.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8} className="muted">Aún no hay documentos.</td></tr>}
             </tbody>
           </table>
         </div>
