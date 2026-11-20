@@ -7,7 +7,7 @@ import { dbMessage, done, fail, str } from "@/lib/forms";
 import { isUuid, oneOf, optDate, optText, optUuid } from "@/lib/forms-parse";
 import { isIp, NAME_MAX } from "@/lib/asset-profiles";
 import { ASSET_STATUS, keysOf } from "@/lib/labels";
-import { mapAssetRows, type MappingResult } from "@/lib/asset-import";
+import { mapAssetRows } from "@/lib/asset-import";
 import { getCatalog, getPeople } from "@/lib/lookups";
 import { getAssetTypes, getScale } from "@/lib/asset-lookups";
 
@@ -106,7 +106,8 @@ async function saveAssetProcesses(assetId: string, formData: FormData, orgId: st
 export type ImportPreview = {
   ok: boolean;
   message?: string;
-  mapping?: MappingResult["mapping"];
+  /** encabezado del archivo → campo de la plataforma */
+  mapping?: Record<string, string>;
   warnings?: string[];
   errors?: string[];
   summary?: {
