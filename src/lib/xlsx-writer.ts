@@ -19,7 +19,7 @@ export type Cell = string | number | null | undefined | { v: string | number | n
 
 export type Validation = {
   sqref: string;
-  type: "list" | "whole" | "date" | "textLength";
+  type: "list" | "whole" | "date" | "textLength" | "custom";
   formula1: string;
   formula2?: string;
   allowBlank?: boolean;
@@ -142,7 +142,7 @@ function sheetXml(sheet: Sheet): string {
         'showErrorMessage="1"',
         `sqref="${v.sqref}"`,
       ];
-      if (v.type !== "list") attrs.push('operator="between"');
+      if (v.type !== "list" && v.type !== "custom") attrs.push('operator="between"');
       if (v.errorStyle && v.errorStyle !== "stop") attrs.push(`errorStyle="${v.errorStyle}"`);
       if (v.promptTitle) attrs.push(`promptTitle="${esc(v.promptTitle.slice(0, 32))}"`);
       if (v.prompt) attrs.push(`prompt="${esc(v.prompt.slice(0, 255))}"`);

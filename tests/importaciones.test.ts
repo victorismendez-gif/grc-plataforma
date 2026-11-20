@@ -106,6 +106,18 @@ describe("importación de activos", () => {
     expect(e).toMatch(/estado «Prestado»/);
   });
 
+  it("lee el correo del custodio y rechaza correos inválidos", () => {
+    const res = mapAssetRows(
+      [
+        { "Identificador único": "R1", "Tipo de activo": "Repositorio", Custodio: "Mesa de ayuda", "Correo custodio": "Mesa@Empresa.co" },
+        { "Identificador único": "R2", "Tipo de activo": "Repositorio", "Correo custodio": "mesa de ayuda" },
+      ],
+      lookups,
+    );
+    expect(res.rows[0]).toMatchObject({ custodian: "Mesa de ayuda", custodian_email: "mesa@empresa.co" });
+    expect(res.errors.join(" ")).toMatch(/«mesa de ayuda» no es un correo válido/);
+  });
+
   it("rechaza tipos desconocidos e identificadores repetidos", () => {
     const res = mapAssetRows(
       [

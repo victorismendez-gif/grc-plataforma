@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     for (let offset = 0; offset < MAX; offset += BATCH) {
       const { data, error } = await supabase
         .from("assets")
-        .select("code, asset_type_id, name, ip_address, status, brand, model, operating_system, serial_number, owner_id, custodian, location, acquired_on, description, classification_id, confidentiality, integrity, availability, attributes")
+        .select("code, asset_type_id, name, ip_address, status, brand, model, operating_system, serial_number, owner_id, custodian, custodian_email, location, acquired_on, description, classification_id, confidentiality, integrity, availability, attributes")
         .order("code")
         .range(offset, offset + BATCH - 1);
       if (error) return NextResponse.json({ error: "No se pudo exportar" }, { status: 500 });
@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
           serial_number: a.serial_number as string | null,
           owner_email: a.owner_id ? email.get(a.owner_id as string) ?? null : null,
           custodian: a.custodian as string | null,
+          custodian_email: (a.custodian_email as string | null) ?? null,
           location: a.location as string | null,
           acquired_on: a.acquired_on as string | null,
           description: a.description as string | null,

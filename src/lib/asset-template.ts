@@ -35,6 +35,7 @@ export type TemplateAsset = {
   serial_number: string | null;
   owner_email: string | null;
   custodian: string | null;
+  custodian_email: string | null;
   location: string | null;
   acquired_on: string | null;
   description: string | null;
@@ -79,11 +80,13 @@ export function templateColumns(input: Pick<TemplateInput, "classifications" | "
       help: "Sistema operativo y versión, por ejemplo Windows 11 Pro, Android 14, Ubuntu 22.04.", allowed: "Texto." },
     { key: "serial_number", header: "Serial", width: 20, style: STYLE.text, required: "No",
       help: "Número de serie del fabricante. En servidores el serial va en «Identificador único».", allowed: "Texto." },
-    { key: "owner_email", header: "Responsable (correo)", width: 30, required: "No",
-      help: "Correo del usuario de la plataforma responsable del activo. Si la persona aún no es usuaria, el dato se guarda como información adicional.",
+    { key: "owner_email", header: "Responsable", width: 30, required: "No",
+      help: "Correo o nombre del usuario de la plataforma responsable del activo. Si la persona aún no es usuaria, el dato se guarda como información adicional.",
       allowed: "Lista desplegable de usuarios (se acepta otro correo con advertencia)." },
     { key: "custodian", header: "Custodio", width: 22, required: "No",
       help: "Persona o área que tiene el activo bajo su cuidado (por ejemplo Mesa de ayuda).", allowed: "Texto." },
+    { key: "custodian_email", header: "Correo custodio", width: 30, required: "No",
+      help: "Correo electrónico del custodio, para contactarlo sobre el activo.", allowed: "Correo válido, por ejemplo mesadeayuda@empresa.com." },
     { key: "location", header: "Ubicación", width: 22, required: "No", help: "Ubicación física.", allowed: "Texto." },
     { key: "acquired_on", header: "Fecha de adquisición (AAAA-MM-DD)", width: 18, style: STYLE.date, required: "No",
       help: "Fecha de compra o de alta.", allowed: "Fecha, por ejemplo 2026-03-15." },
@@ -148,7 +151,7 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
     { sqref: range("classification"), type: "list", formula1: "ClasificacionInformacion", promptTitle: "Clasificación",
       prompt: "Nivel de clasificación de la información según la política.", errorTitle: "Clasificación no válida", error: "Elige un valor de la lista." },
     { sqref: range("owner_email"), type: "list", formula1: "Responsables", errorStyle: "warning", promptTitle: "Responsable",
-      prompt: "Correo de un usuario de la plataforma.", errorTitle: "Responsable", error: "Ese correo no es un usuario de la plataforma. Se guardará como dato adicional." },
+      prompt: "Correo o nombre de un usuario de la plataforma.", errorTitle: "Responsable", error: "Ese correo no es un usuario de la plataforma. Se guardará como dato adicional." },
     ...(Object.keys(DIMENSIONS) as (keyof typeof DIMENSIONS)[]).map((d): Validation => ({
       sqref: range(d), type: "whole", formula1: "1", formula2: "5", promptTitle: DIMENSIONS[d],
       prompt: input.scale.filter((s) => s.dimension === d).map((s) => `${s.level} ${s.label}`).join(" · ").slice(0, 250) || "Valor de 1 a 5",
@@ -159,6 +162,9 @@ export function buildAssetTemplate(input: TemplateInput): Workbook {
     { sqref: range("code"), type: "textLength", formula1: "1", formula2: "60", promptTitle: "Identificador único",
       prompt: "Placa, IMEI, serial, documento o etiqueta según el tipo. Vacío solo si el tipo lo permite (se asigna un número automático).",
       errorTitle: "Identificador", error: "Máximo 60 caracteres." },
+    { sqref: range("custodian_email"), type: "custom", formula1: `ISNUMBER(SEARCH("@",${col("custodian_email")}2))`,
+      promptTitle: "Correo custodio", prompt: "Correo electrónico del custodio.", errorTitle: "Correo no válido",
+      error: "Escribe un correo válido, por ejemplo mesadeayuda@empresa.com." },
     { sqref: range("name"), type: "textLength", formula1: "1", formula2: String(NAME_MAX), promptTitle: "Nombre del activo",
       prompt: `Máximo ${NAME_MAX} caracteres. En servidores, el hostname.`, errorTitle: "Nombre muy largo", error: `Máximo ${NAME_MAX} caracteres.` },
   ];

@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
 import { isUuid, oneOf, optDate, optText, optUuid } from "@/lib/forms-parse";
-import { isIp, NAME_MAX } from "@/lib/asset-profiles";
+import { isEmail, isIp, NAME_MAX } from "@/lib/asset-profiles";
 import { ASSET_STATUS, keysOf } from "@/lib/labels";
 import { mapAssetRows } from "@/lib/asset-import";
 import { getCatalog, getPeople } from "@/lib/lookups";
@@ -25,6 +25,11 @@ function assetRecord(fd: FormData): { record: Record<string, unknown>; error?: s
   if (has("description")) r.description = optText(fd, "description");
   if (has("owner_id")) r.owner_id = optUuid(fd, "owner_id");
   if (has("custodian")) r.custodian = optText(fd, "custodian", 200);
+  if (has("custodian_email")) {
+    const email = str(fd, "custodian_email").toLowerCase();
+    if (email && !isEmail(email)) return { record: r, error: `«${email}» no es un correo válido para el custodio.` };
+    r.custodian_email = email || null;
+  }
   if (has("location")) r.location = optText(fd, "location", 200);
   if (has("classification_id")) r.classification_id = optUuid(fd, "classification_id");
   for (const k of ["confidentiality", "integrity", "availability"] as const) if (has(k)) r[k] = optLevel5(fd, k);

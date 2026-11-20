@@ -1,7 +1,7 @@
 // Traduce las filas de un Excel/CSV de inventario a registros de activos.
 // Código puro (sin red): se usa en el servidor y en las pruebas.
 import { clean, normalize } from "@/lib/text";
-import { isIp, NAME_MAX, readSettings, type AssetTypeSettings, type ScaleLevel } from "@/lib/asset-profiles";
+import { isEmail, isIp, NAME_MAX, readSettings, type AssetTypeSettings, type ScaleLevel } from "@/lib/asset-profiles";
 
 export type Lookup = { id: string; code?: string | null; label?: string | null; name?: string | null; email?: string | null };
 export type TypeLookup = { id: string; code: string; label: string; settings: AssetTypeSettings | unknown };
@@ -15,7 +15,7 @@ export type Lookups = {
 type MappedField =
   | "code" | "id_placa" | "id_imei" | "id_documento"
   | "asset_type_id" | "name" | "ip_address" | "status" | "brand" | "model" | "operating_system" | "serial_number"
-  | "owner_id" | "custodian" | "location" | "acquired_on" | "description"
+  | "owner_id" | "custodian" | "custodian_email" | "location" | "acquired_on" | "description"
   | "classification_id" | "confidentiality" | "integrity" | "availability";
 
 /** Encabezados aceptados (normalizados, sin el texto entre paréntesis). */
@@ -34,6 +34,7 @@ const HEADER_ALIASES: Record<MappedField, string[]> = {
   serial_number: ["serial", "serie", "numerodeserie", "numeroserie", "sn"],
   owner_id: ["responsable", "correoresponsable", "dueno", "propietario"],
   custodian: ["custodio"],
+  custodian_email: ["correocustodio", "correodelcustodio", "emailcustodio", "correoelectronicocustodio"],
   location: ["ubicacion", "ubicacionfisica", "lugar"],
   acquired_on: ["fechaadquisicion", "fechadeadquisicion", "fechacompra", "fechadecompra"],
   description: ["descripcion", "detalle"],
@@ -204,6 +205,12 @@ export function mapAssetRows(raw: Record<string, unknown>[], lookups: Lookups): 
         case "description":
           out[field] = asText(value)?.slice(0, 2000) ?? null;
           break;
+        case "custodian_email": {
+          const s = asText(value)?.toLowerCase() ?? null;
+          if (s && !isEmail(s)) errors.push(`Fila ${line}: «${s}» no es un correo válido para el custodio.`);
+          out.custodian_email = s;
+          break;
+        }
         case "ip_address": {
           const s = asText(value);
           if (s && !isIp(s)) errors.push(`Fila ${line}: «${s}» no es una dirección IP válida.`);

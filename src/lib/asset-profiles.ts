@@ -22,6 +22,7 @@ export const OPTIONAL_FIELDS = [
   "serial_number",
   "owner_id",
   "custodian",
+  "custodian_email",
   "location",
   "acquired_on",
   "description",
@@ -40,6 +41,7 @@ export const FIELD_LABELS: Record<OptionalField | "code" | "asset_type_id" | "cl
   serial_number: "Serial",
   owner_id: "Responsable",
   custodian: "Custodio",
+  custodian_email: "Correo custodio",
   location: "Ubicación",
   acquired_on: "Fecha de adquisición",
   description: "Descripción",
@@ -61,7 +63,7 @@ export const NAME_MAX = 80;
 
 const GENERIC: AssetTypeSettings = {
   identifier: { kind: "etiqueta", label: "Etiqueta o número", required: false },
-  fields: ["name", "status", "owner_id", "custodian", "location", "description"],
+  fields: ["name", "status", "owner_id", "custodian", "custodian_email", "location", "description"],
 };
 
 /** Normaliza la configuración guardada (tolera valores incompletos o antiguos). */
@@ -94,6 +96,11 @@ export const DIMENSIONS = {
   integrity: "Integridad",
   availability: "Disponibilidad",
 } as const;
+
+/** Valida un correo electrónico (mismo criterio que la base de datos). */
+export function isEmail(value: string): boolean {
+  return value.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
+}
 
 /** Valida una dirección IPv4 o IPv6 (sin máscara). */
 export function isIp(value: string): boolean {

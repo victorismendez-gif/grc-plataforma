@@ -20,6 +20,7 @@ export type AssetValues = {
   description?: string | null;
   owner_id?: string | null;
   custodian?: string | null;
+  custodian_email?: string | null;
   location?: string | null;
   classification_id?: string | null;
   confidentiality?: number | null;
@@ -184,6 +185,13 @@ function Field({ field, label, asset, people }: { field: OptionalField; label: s
         <label>
           {label}
           <input type="date" name="acquired_on" defaultValue={asset?.acquired_on ?? ""} />
+        </label>
+      );
+    case "custodian_email":
+      return (
+        <label>
+          {label}
+          <input type="email" name="custodian_email" defaultValue={asset?.custodian_email ?? ""} maxLength={200} placeholder="custodio@empresa.com" />
         </label>
       );
     case "ip_address":
