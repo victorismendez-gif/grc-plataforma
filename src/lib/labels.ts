@@ -83,3 +83,38 @@ export function level5Tone(level: number | null | undefined): string {
 export function keysOf<T extends Record<string, string>>(map: T): (keyof T & string)[] {
   return Object.keys(map) as (keyof T & string)[];
 }
+
+// --- Diagnóstico GAP y planes ---------------------------------------
+export const GAP_STATUS = {
+  cumple: "Cumple",
+  parcial: "Cumple parcial",
+  no_cumple: "No cumple",
+  no_aplica: "No aplica",
+} as const;
+export const GAP_ASSESSMENT_STATUS = { en_curso: "En curso", cerrado: "Cerrado" } as const;
+export const PRIORITY = { alta: "Alta", media: "Media", baja: "Baja" } as const;
+export const ACTION_STATUS = {
+  pendiente: "Pendiente",
+  en_curso: "En curso",
+  terminada: "Terminada",
+  cancelada: "Cancelada",
+} as const;
+export const PLAN_ORIGIN = {
+  gap: "Diagnóstico GAP",
+  auditoria: "Auditoría",
+  riesgo: "Riesgos",
+  tercero: "Terceros",
+  direccion: "Revisión por la dirección",
+  otro: "Otro",
+} as const;
+
+export function gapTone(status: string | null | undefined): string {
+  if (status === "cumple") return "good";
+  if (status === "parcial") return "warn";
+  if (status === "no_cumple") return "crit";
+  return "";
+}
+
+export function priorityTone(p: string | null | undefined): string {
+  return p === "alta" ? "crit" : p === "media" ? "warn" : p === "baja" ? "good" : "";
+}
