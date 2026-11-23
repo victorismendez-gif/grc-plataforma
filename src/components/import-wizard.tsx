@@ -44,6 +44,20 @@ function guessHeaderRow(kind: Kind, rows: unknown[][]): number {
   return 0;
 }
 
+const HELPER_SHEETS = ["instrucciones", "listas"];
+
+/** Qué tan probable es que la hoja sea la de datos. */
+function sheetScore(kind: Kind, sheet: SheetData): { valid: boolean; columns: number; rows: number } {
+  const hr = guessHeaderRow(kind, sheet.rows);
+  const m = mappingOf(kind, (sheet.rows[hr] ?? []).map((c) => String(c ?? "")));
+  const helper = HELPER_SHEETS.includes(sheet.name.trim().toLowerCase());
+  return {
+    valid: !helper && isValidLayout(kind, m),
+    columns: Object.values(m).filter((v) => v !== "ignorada").length,
+    rows: sheet.rows.length - hr,
+  };
+}
+
 type Outcome =
   | { kind: "none" }
   | { kind: "failed"; title: string; reasons: string[]; warnings?: string[] }
@@ -111,11 +125,13 @@ export default function ImportWizard({ kind, labels }: { kind: Kind; labels: Rec
     }
     try {
       const wb = await readWorkbook(f);
+      // La hoja de datos es la que tiene más columnas reconocidas (no la más larga:
+      // la hoja «Instrucciones» de la plantilla también nombra las columnas).
+      const scores = wb.map((s) => sheetScore(kind, s));
       let best = 0;
-      wb.forEach((s, i) => {
-        const ok = isValidLayout(kind, mappingOf(kind, (s.rows[guessHeaderRow(kind, s.rows)] ?? []).map(String)));
-        const bestOk = isValidLayout(kind, mappingOf(kind, (wb[best].rows[guessHeaderRow(kind, wb[best].rows)] ?? []).map(String)));
-        if ((ok && !bestOk) || (ok === bestOk && s.rows.length > wb[best].rows.length)) best = i;
+      scores.forEach((sc, i) => {
+        const b = scores[best];
+        if (sc.valid !== b.valid ? sc.valid : sc.columns !== b.columns ? sc.columns > b.columns : sc.rows > b.rows) best = i;
       });
       const hr = guessHeaderRow(kind, wb[best]?.rows ?? []);
       setFile(f);
