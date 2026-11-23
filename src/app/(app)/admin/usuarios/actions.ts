@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { SITE_URL } from "@/lib/env";
+import { getSiteUrl } from "@/lib/site-url";
 import { dbMessage, done, fail, str } from "@/lib/forms";
 
 const PATH = "/admin/usuarios";
@@ -36,7 +36,7 @@ export async function inviteUser(formData: FormData) {
 
   const admin = createAdminClient();
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${SITE_URL}/auth/confirm?next=/cuenta/clave`,
+    redirectTo: `${await getSiteUrl()}/auth/confirm?next=/cuenta/clave`,
     data: { full_name },
   });
   if (inviteError || !invited.user) {
@@ -148,6 +148,6 @@ export async function createAccessLink(_prev: AccessLinkState, formData: FormDat
   const hashed = res.data?.properties?.hashed_token;
   if (res.error || !hashed) return { error: "No se pudo generar el enlace. Intenta de nuevo en unos minutos." };
   const type = res.data.properties.verification_type ?? "recovery";
-  const link = `${SITE_URL}/auth/activar?token_hash=${encodeURIComponent(hashed)}&type=${encodeURIComponent(type)}&next=${encodeURIComponent("/cuenta/clave")}`;
+  const link = `${await getSiteUrl()}/auth/activar?token_hash=${encodeURIComponent(hashed)}&type=${encodeURIComponent(type)}&next=${encodeURIComponent("/cuenta/clave")}`;
   return { link, email: profile.email as string };
 }

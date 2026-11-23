@@ -2,7 +2,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { SITE_URL, safeNext } from "@/lib/env";
+import { safeNext } from "@/lib/env";
+import { getSiteUrl } from "@/lib/site-url";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -34,7 +35,7 @@ export async function requestPasswordReset(formData: FormData) {
   const supabase = await createClient();
   // La respuesta es la misma exista o no la cuenta (no revela usuarios).
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${SITE_URL}/auth/confirm?next=/cuenta/clave`,
+    redirectTo: `${await getSiteUrl()}/auth/confirm?next=/cuenta/clave`,
   });
   redirect("/recuperar?enviado=1");
 }
