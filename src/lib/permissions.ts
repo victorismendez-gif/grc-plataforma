@@ -7,6 +7,7 @@ export const PERMISSIONS = [
   "audit_log.read",
   "assets.read",
   "assets.write",
+  "assets.self",
   "frameworks.read",
   "frameworks.write",
   "controls.read",
@@ -42,4 +43,4 @@ export function isPermission(value: string): value is Permission {
   return (PERMISSIONS as readonly string[]).includes(value);
 }
 
-export const SYSTEM_ROLE_CODES = ["administrador", "lider_sistema", "auditor", "responsable_area", "consulta"] as const;
+export const SYSTEM_ROLE_CODES = ["administrador", "lider_sistema", "auditor", "responsable_area", "consulta", "empleado"] as const;

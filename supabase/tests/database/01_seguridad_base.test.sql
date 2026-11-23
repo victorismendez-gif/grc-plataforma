@@ -25,7 +25,7 @@ select r.organization_id, '22222222-2222-2222-2222-222222222222', r.id
  where o.slug = 'empresa-a' and r.code = 'consulta';
 
 select is((select count(*)::int from public.roles r join public.organizations o on o.id = r.organization_id
-            where o.slug = 'empresa-a' and r.is_system), 5, 'Cada organización nace con 5 roles base');
+            where o.slug = 'empresa-a' and r.is_system), 6, 'Cada organización nace con 6 roles base');
 select is((select count(*)::int from public.role_permissions rp join public.roles r on r.id = rp.role_id
             join public.organizations o on o.id = r.organization_id
             where o.slug = 'empresa-a' and r.code = 'administrador'),

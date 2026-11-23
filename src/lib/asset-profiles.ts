@@ -109,3 +109,6 @@ export function isIp(value: string): boolean {
   if (v4) return v4.slice(1).every((n) => Number(n) <= 255);
   return /^[0-9a-f:]+$/i.test(v) && v.includes(":") && v.split(":").length <= 8;
 }
+
+/** Tipos de equipo que un empleado puede ver y actualizar (rol Empleado). */
+export const SELF_TYPES = ["portatil", "escritorio", "tableta", "celular"] as const;

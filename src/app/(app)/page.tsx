@@ -31,6 +31,15 @@ export default async function HomePage() {
           <small>roles asignados</small>
         </div>
       </div>
+      {ctx.can("assets.self") && !ctx.can("assets.write") && (
+        <section className="panel">
+          <h2>Mis equipos</h2>
+          <p className="small">
+            Revisa los computadores, tabletas y celulares que tienes asignados y mantén sus datos al día.{" "}
+            <a href="/mis-equipos">Ir a Mis equipos →</a>
+          </p>
+        </section>
+      )}
       <section className="panel">
         <h2>Estado de la plataforma</h2>
         <p className="muted small">

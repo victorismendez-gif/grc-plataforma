@@ -13,6 +13,9 @@ import ComboField from "@/components/combo-field";
 
 type Option = { id: string; label: string; code?: string | null };
 
+/** Campos que solo cambia quien administra activos. */
+const MANAGED_FIELDS: OptionalField[] = ["owner_id", "custodian", "custodian_email"];
+
 export type AssetValues = {
   id?: string;
   code?: string | null;
@@ -47,9 +50,11 @@ type Props = {
   scale: ScaleLevel[];
   action: (fd: FormData) => Promise<void>;
   readOnly?: boolean;
+  /** Empleado: solo datos del equipo (sin campos de gestión). */
+  selfService?: boolean;
 };
 
-export default function AssetFormClient({ asset, types, classes, people, processes, scale, action, readOnly }: Props) {
+export default function AssetFormClient({ asset, types, classes, people, processes, scale, action, readOnly, selfService }: Props) {
   const [typeId, setTypeId] = useState(asset?.asset_type_id ?? "");
   const type = useMemo(() => types.find((t) => t.id === typeId), [types, typeId]);
   const ownerValue = asset?.owner_id ? people.find((p) => p.id === asset.owner_id)?.label ?? "" : asset?.owner_text ?? "";
@@ -59,7 +64,7 @@ export default function AssetFormClient({ asset, types, classes, people, process
     <form action={action} className="stack">
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 16 }}>
         {asset?.id && <input type="hidden" name="id" value={asset.id} />}
-        {!asset?.id && !readOnly && (
+        {!asset?.id && !readOnly && !selfService && (
           <div className="callout">
             <span className="small">
               <b>¿Vas a registrar varios activos?</b> Descarga la plantilla, llénala en Excel y cárgala de una vez.
@@ -101,12 +106,13 @@ export default function AssetFormClient({ asset, types, classes, people, process
                   placeholder={type.settings.identifier.required ? "" : "Vacío = número automático"}
                 />
               </label>
-              {type.settings.fields.map((f) => (
+              {type.settings.fields.filter((f) => !selfService || !MANAGED_FIELDS.includes(f)).map((f) => (
                 <Field key={f} field={f} label={fieldLabel(f, type.settings)} asset={asset} people={people} ownerValue={ownerValue} />
               ))}
               </div>
             </fieldset>
 
+            {!selfService && (
             <fieldset className="form-section">
               <legend>Proceso, clasificación y valoración</legend>
               <div className="form-grid">
@@ -124,6 +130,7 @@ export default function AssetFormClient({ asset, types, classes, people, process
                 ))}
               </div>
             </fieldset>
+            )}
 
             {!readOnly && (
               <div>
