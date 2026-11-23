@@ -1,6 +1,11 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  # El plan gratuito tiene 300 créditos al mes y cada publicación en producción
+  # cuesta 15 (unas 20 al mes). Solo se publica cuando el último commit lleva
+  # «[deploy]» en el mensaje; el resto se omite sin gastar créditos.
+  # (exit 0 = omitir; exit 1 = construir y publicar)
+  ignore = "git log -1 --pretty=%B | grep -qF '[deploy]' && exit 1 || exit 0"
 
 [build.environment]
   NODE_VERSION = "22"
