@@ -11,6 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (ctx.can("frameworks.read")) items.push({ href: "/normas", label: "Normas" });
   if (ctx.can("controls.read")) items.push({ href: "/controles", label: "Controles" });
   if (ctx.can("documents.read")) items.push({ href: "/documentos", label: "Documentos" }, { href: "/politicas", label: "Políticas" });
+  if (ctx.can("risks.read")) items.push({ href: "/riesgos", label: "Riesgos" });
   if (ctx.can("gap.read")) items.push({ href: "/gap", label: "Diagnóstico GAP" });
   if (ctx.can("plans.read")) items.push({ href: "/plan", label: "Plan de trabajo" });
   if (ctx.can("users.manage")) items.push({ href: "/admin/usuarios", label: "Usuarios" });

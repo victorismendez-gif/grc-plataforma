@@ -44,8 +44,8 @@ export default async function HomePage() {
         <h2>Estado de la plataforma</h2>
         <p className="muted small">
           Disponibles: activos de información con importación mensual, estructura de la organización, normas y
-          requisitos, controles, documentos con flujo de aprobación, políticas, diagnóstico GAP y plan de trabajo.
-          Próximamente: riesgos, terceros, auditoría y tableros.
+          requisitos, controles, documentos con flujo de aprobación, políticas, diagnóstico GAP, plan de trabajo y gestión de riesgos.
+          Próximamente: terceros, auditoría y tableros.
         </p>
       </section>
     </>
