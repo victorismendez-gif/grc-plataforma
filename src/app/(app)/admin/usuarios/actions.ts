@@ -124,3 +124,30 @@ export async function resetMfa(formData: FormData) {
   revalidatePath(PATH);
   done(PATH, "Doble factor restablecido. El usuario lo configurará de nuevo en su próximo ingreso.");
 }
+
+export type AccessLinkState = { link?: string; email?: string; error?: string };
+
+/**
+ * Enlace de acceso de un solo uso, sin enviar correo. Sirve cuando el
+ * antivirus del correo (p. ej., Microsoft Defender) abre el enlace de la
+ * invitación antes que la persona y lo deja vencido. La persona abre el
+ * enlace, pulsa «Activar mi acceso», configura el doble factor y define su
+ * contraseña. Vence en una hora.
+ */
+export async function createAccessLink(_prev: AccessLinkState, formData: FormData): Promise<AccessLinkState> {
+  await requirePermission("users.manage");
+  const userId = uuid.safeParse(str(formData, "user_id"));
+  if (!userId.success) return { error: "Usuario no válido." };
+  const supabase = await createClient();
+  const { data: profile } = await supabase.from("profiles").select("email, active").eq("id", userId.data).maybeSingle();
+  if (!profile) return { error: "El usuario no pertenece a tu organización." };
+  if (!profile.active) return { error: "El usuario está inactivo. Actívalo primero." };
+  const admin = createAdminClient();
+  let res = await admin.auth.admin.generateLink({ type: "recovery", email: profile.email as string });
+  if (res.error) res = await admin.auth.admin.generateLink({ type: "magiclink", email: profile.email as string });
+  const hashed = res.data?.properties?.hashed_token;
+  if (res.error || !hashed) return { error: "No se pudo generar el enlace. Intenta de nuevo en unos minutos." };
+  const type = res.data.properties.verification_type ?? "recovery";
+  const link = `${SITE_URL}/auth/activar?token_hash=${encodeURIComponent(hashed)}&type=${encodeURIComponent(type)}&next=${encodeURIComponent("/cuenta/clave")}`;
+  return { link, email: profile.email as string };
+}

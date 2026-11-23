@@ -11,6 +11,9 @@ const ERRORS: Record<string, string> = {
   datos: "Revisa el correo y la contraseña.",
   credenciales: "Correo o contraseña incorrectos, o la cuenta está bloqueada.",
   enlace: "El enlace no es válido o ya expiró. Solicita uno nuevo.",
+  enlace_usado:
+    "El enlace del correo ya fue usado o venció. Algunos antivirus de correo corporativo lo abren antes que tú. " +
+    "Pide al administrador un «Enlace de acceso» desde Usuarios y ábrelo directamente.",
 };
 
 type Props = { searchParams: Promise<{ error?: string; next?: string; salida?: string }> };

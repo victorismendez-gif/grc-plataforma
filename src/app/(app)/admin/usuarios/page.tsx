@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Flash, { type FlashParams } from "@/components/flash";
 import { assignRole, inviteUser, removeRole, resetMfa, setActive } from "./actions";
+import AccessLinkButton from "./access-link";
 
 export const metadata: Metadata = { title: "Usuarios" };
 
@@ -68,7 +69,9 @@ export default async function UsersPage({ searchParams }: { searchParams: FlashP
           <button type="submit">Enviar invitación</button>
         </form>
         <p className="small muted">
-          La persona recibe un enlace, configura el doble factor y luego define su contraseña.
+          La persona recibe un enlace, configura el doble factor y luego define su contraseña. Si el enlace del correo le
+          aparece vencido (algunos antivirus corporativos lo abren antes), usa «Enlace de acceso» en su fila y envíaselo
+          por WhatsApp, Teams o en persona.
         </p>
       </section>
 
@@ -133,6 +136,7 @@ export default async function UsersPage({ searchParams }: { searchParams: FlashP
                             </button>
                           </form>
                         )}
+                        {u.active && u.id !== ctx.userId && <AccessLinkButton userId={u.id} />}
                         <form action={resetMfa}>
                           <input type="hidden" name="user_id" value={u.id} />
                           <button type="submit" className="ghost">Restablecer doble factor</button>

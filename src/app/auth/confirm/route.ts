@@ -24,6 +24,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(`/auth/sesion?next=${encodeURIComponent(next)}`, origin));
   }
 
+  // Enlace con token: pasa por la página con botón para que el antivirus del
+  // correo no consuma el enlace de un solo uso al revisarlo.
+  if (tokenHash && type && OTP_TYPES.includes(type)) {
+    const q = new URLSearchParams({ token_hash: tokenHash, type, next });
+    return NextResponse.redirect(new URL(`/auth/activar?${q.toString()}`, origin));
+  }
+
   let ok = false;
   if (tokenHash && type && OTP_TYPES.includes(type)) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
