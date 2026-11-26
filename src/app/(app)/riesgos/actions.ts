@@ -38,8 +38,6 @@ async function entryRecord(fd: FormData, path: string) {
   const riskId = optUuid(fd, "risk_id");
   if (!riskId) fail(path, "Elige el riesgo.");
   const owner = await resolveResponsible(str(fd, "owner"));
-  const proc = await resolveProcess(str(fd, "process"));
-  if (proc.error) fail(path, proc.error);
   const strategy = str(fd, "treatment_strategy");
   return {
     risk_id: riskId,
@@ -47,7 +45,6 @@ async function entryRecord(fd: FormData, path: string) {
     category_id: optUuid(fd, "category_id"),
     threat_event: optText(fd, "threat_event", 2000),
     consequence: optText(fd, "consequence", 2000),
-    process_id: proc.id,
     owner_id: owner.id,
     owner_text: owner.text,
     treatment_strategy: (keysOf(STRATEGIES) as string[]).includes(strategy) ? strategy : null,
@@ -256,10 +253,33 @@ export async function saveCause(formData: FormData) {
     }
   }
   const rec = { code, description, factor_id: factorId };
-  const { error } = id
-    ? await supabase.from("risk_causes").update(rec).eq("id", id)
-    : await supabase.from("risk_causes").insert({ ...rec, organization_id: ctx.organization.id });
-  if (error) fail(path, dbMessage(error, "No se pudo guardar la causa."));
+  const { data: saved, error } = id
+    ? await supabase.from("risk_causes").update(rec).eq("id", id).select("id").single()
+    : await supabase.from("risk_causes").insert({ ...rec, organization_id: ctx.organization.id }).select("id").single();
+  if (error || !saved) fail(path, dbMessage(error, "No se pudo guardar la causa."));
+
+  // Procesos de la causa: nombres separados por «;» (los que no existen se crean)
+  const names = [...new Set(str(formData, "processes").split(/[;\n|]+/).map((x) => x.trim()).filter((x) => x.length >= 2))].slice(0, 50);
+  const wanted: string[] = [];
+  for (const n of names) {
+    const proc = await resolveProcess(n);
+    if (proc.error) fail(path, proc.error);
+    if (proc.id && !wanted.includes(proc.id)) wanted.push(proc.id);
+  }
+  const { data: current } = await supabase.from("risk_cause_processes").select("process_id").eq("cause_id", saved.id);
+  const have = new Set((current ?? []).map((r) => r.process_id as string));
+  const remove = [...have].filter((p) => !wanted.includes(p));
+  const add = wanted.filter((p) => !have.has(p));
+  if (remove.length) {
+    const { error: e } = await supabase.from("risk_cause_processes").delete().eq("cause_id", saved.id).in("process_id", remove);
+    if (e) fail(path, dbMessage(e, "No se pudieron actualizar los procesos."));
+  }
+  if (add.length) {
+    const { error: e } = await supabase.from("risk_cause_processes")
+      .insert(add.map((process_id) => ({ organization_id: ctx.organization.id, cause_id: saved.id, process_id })));
+    if (e) fail(path, dbMessage(e, "No se pudieron guardar los procesos."));
+  }
+  revalidatePath(BASE);
   done(path, "Causa guardada.");
 }
 

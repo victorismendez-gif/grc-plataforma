@@ -1,4 +1,4 @@
-import { getPeople, getProcesses } from "@/lib/lookups";
+import { getPeople } from "@/lib/lookups";
 import { getAssetTypes } from "@/lib/asset-lookups";
 import { getRiskCatalogs } from "@/lib/risk-data";
 import { STRATEGIES, type Methodology } from "@/lib/risk";
@@ -13,9 +13,9 @@ export type EntryValues = {
 export default async function EntryForm({ entry, action, readOnly, withEvaluation, m }: {
   entry?: EntryValues; action: (fd: FormData) => Promise<void>; readOnly?: boolean; withEvaluation?: boolean; m?: Methodology;
 }) {
-  const [cats, people, processes, types] = await Promise.all([getRiskCatalogs(), getPeople(), getProcesses(), getAssetTypes()]);
+  const [cats, people, types] = await Promise.all([getRiskCatalogs(), getPeople(), getAssetTypes()]);
   const ownerValue = entry?.owner_id ? people.find((p) => p.id === entry.owner_id)?.label ?? "" : entry?.owner_text ?? "";
-  const processValue = entry?.process_id ? processes.find((p) => p.id === entry.process_id)?.label ?? "" : "";
+  const causeProcesses = entry?.cause_id ? cats.causes.find((c) => c.id === entry.cause_id)?.processes ?? [] : [];
   return (
     <form action={action} className="stack">
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}>
@@ -35,6 +35,12 @@ export default async function EntryForm({ entry, action, readOnly, withEvaluatio
               {cats.causes.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.description.slice(0, 100)}{c.factor ? ` (${c.factor.name})` : ""}</option>)}
             </select>
           </label>
+          {entry?.cause_id && (
+            <p className="small muted span-all" style={{ margin: 0 }}>
+              Procesos de la causa: {causeProcesses.length ? causeProcesses.map((p) => p.name).join(", ") : "ninguno"}.
+              Se editan en <a href="/riesgos/catalogo">Catálogo de riesgos y causas</a> y aplican a todos los escenarios con esa causa.
+            </p>
+          )}
           <label>
             Tipo de riesgo
             <select name="category_id" defaultValue={entry?.category_id ?? ""}>
@@ -42,7 +48,6 @@ export default async function EntryForm({ entry, action, readOnly, withEvaluatio
               {cats.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <ComboField name="process" label="Proceso" value={processValue} options={processes} placeholder="Elige o escribe un proceso" />
           <ComboField name="owner" label="Responsable del riesgo" value={ownerValue} options={people} placeholder="Elige o escribe un nombre" />
           <fieldset className="span-all checks">
             <legend>Tipos de activo afectados</legend>

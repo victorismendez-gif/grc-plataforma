@@ -21,7 +21,7 @@ type SP = {
 
 type EntryRow = {
   id: string; code: string; risk_code: string; risk_name: string; cause_code: string | null; cause: string | null; category: string | null;
-  category_id: string | null; risk_id: string; process_id: string | null; threat_event: string | null;
+  category_id: string | null; risk_id: string; cause_id: string | null; threat_event: string | null;
   inherent_probability: number | null; inherent_impact: number | null; inherent_score: number | null; inherent_zone: string | null; inherent_color: string | null;
   residual_probability: number | null; residual_impact: number | null; residual_score: number | null; residual_zone: string | null; residual_color: string | null;
   out_of_tolerance: boolean; has_treatment: boolean; accepted_at: string | null; treatment_strategy: string | null; controls_count: number;
@@ -40,7 +40,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
     supabase.from("risk_entry_asset_types").select("entry_id, asset_type_id").limit(50000),
     supabase
       .from("risk_entries_view")
-      .select("id, code, risk_code, risk_name, cause_code, cause, category, category_id, risk_id, process_id, threat_event, inherent_probability, inherent_impact, inherent_score, inherent_zone, inherent_color, residual_probability, residual_impact, residual_score, residual_zone, residual_color, out_of_tolerance, has_treatment, accepted_at, treatment_strategy, controls_count, materialized_count, owner_id, owner_text")
+      .select("id, code, risk_code, risk_name, cause_code, cause, category, category_id, risk_id, cause_id, threat_event, inherent_probability, inherent_impact, inherent_score, inherent_zone, inherent_color, residual_probability, residual_impact, residual_score, residual_zone, residual_color, out_of_tolerance, has_treatment, accepted_at, treatment_strategy, controls_count, materialized_count, owner_id, owner_text")
       .eq("active", true)
       .order("code")
       .limit(5000),
@@ -48,7 +48,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const all = (data ?? []) as EntryRow[];
   const vista = sp.vista === "inherente" ? "inherente" : "residual";
   const k = riskKpis(all);
-  const processName = new Map(processes.map((p) => [p.id, p.label]));
+  const causeProcs = new Map(cats.causes.map((c) => [c.id, c.processes]));
   const typeName = new Map(types.map((t) => [t.id, t.label]));
   const entryTypes = new Map<string, string[]>();
   for (const l of typeLinks ?? []) {
@@ -59,7 +59,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const rows = all.filter((e) => {
     if (sp.riesgo && e.risk_id !== sp.riesgo) return false;
     if (sp.categoria && e.category_id !== sp.categoria) return false;
-    if (sp.proceso && e.process_id !== sp.proceso) return false;
+    if (sp.proceso && !(causeProcs.get(e.cause_id ?? "") ?? []).some((p) => p.id === sp.proceso)) return false;
     if (sp.activo && !(entryTypes.get(e.id) ?? []).includes(sp.activo)) return false;
     if (sp.estado === "sin_valorar" && e.residual_score !== null) return false;
     if (sp.estado === "fuera" && !e.out_of_tolerance) return false;
@@ -181,7 +181,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Riesgo</th><th>Causa</th><th>Tipo</th><th>Tipos de activo</th><th>Proceso</th><th>Controles</th><th>Inherente</th><th>Residual</th><th>Tratamiento</th></tr>
+              <tr><th>ID</th><th>Riesgo</th><th>Causa</th><th>Tipo</th><th>Tipos de activo</th><th>Procesos</th><th>Controles</th><th>Inherente</th><th>Residual</th><th>Tratamiento</th></tr>
             </thead>
             <tbody>
               {rows.slice(0, 1000).map((e) => (
@@ -191,7 +191,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
                   <td className="small">{e.cause_code ? <b>{e.cause_code} </b> : null}{e.cause ?? "—"}</td>
                   <td className="small">{e.category ?? "—"}</td>
                   <td className="small">{(entryTypes.get(e.id) ?? []).map((t) => typeName.get(t)).filter(Boolean).join(", ") || "—"}</td>
-                  <td className="small">{e.process_id ? processName.get(e.process_id) : "—"}</td>
+                  <td className="small">{(causeProcs.get(e.cause_id ?? "") ?? []).map((p) => p.name).join(", ") || "—"}</td>
                   <td className="small">{e.controls_count}</td>
                   <td><Zone name={e.inherent_zone} color={e.inherent_color} score={e.inherent_score} /></td>
                   <td><Zone name={e.residual_zone} color={e.residual_color} score={e.residual_score} /></td>

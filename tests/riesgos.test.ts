@@ -86,4 +86,9 @@ describe("lectura del archivo de causas y riesgos", () => {
     expect(res.rows[1].asset_types).toBeUndefined();
     expect(res.errors[0]).toMatch(/Fila 4: tipo de activo no reconocido: «Nevera»/);
   });
+  it("admite varios procesos por causa", () => {
+    const res = mapRiskRows([{ ID: "RG-0001", "Cod Riesgo": "R1", Proceso: "Nómina; Compras ;Nómina" }, { ID: "RG-0002", "Cod Riesgo": "R1", Proceso: "" }], M, []);
+    expect(res.rows[0].processes).toEqual(["Nómina", "Compras"]);
+    expect(res.rows[1].processes).toBeUndefined();
+  });
 });

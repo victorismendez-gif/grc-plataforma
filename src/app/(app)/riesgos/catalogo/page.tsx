@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { getRiskCatalogs } from "@/lib/risk-data";
+import { getProcesses } from "@/lib/lookups";
 import { DIMENSIONS, guessDimension } from "@/lib/risk";
 import Flash, { type FlashParams } from "@/components/flash";
 import { saveCatalogRisk, saveCause } from "../actions";
@@ -11,7 +12,7 @@ export const metadata: Metadata = { title: "Catálogo de riesgos" };
 export default async function CatalogPage({ searchParams }: { searchParams: FlashParams }) {
   const ctx = await requirePermission("risks.read");
   const sp = await searchParams;
-  const cats = await getRiskCatalogs();
+  const [cats, processes] = await Promise.all([getRiskCatalogs(), getProcesses()]);
   const canWrite = ctx.can("risks.write");
   return (
     <>
@@ -61,21 +62,25 @@ export default async function CatalogPage({ searchParams }: { searchParams: Flas
             <label style={{ width: 100 }}>Código<input name="code" maxLength={30} required placeholder="CAU137" /></label>
             <label style={{ flex: 1, minWidth: 260 }}>Nueva causa<input name="description" maxLength={1000} required /></label>
             <label style={{ width: 180 }}>Factor<input name="factor" maxLength={160} placeholder="Tecnología, Procesos…" /></label>
+            <label style={{ width: 240 }}>Procesos<input name="processes" maxLength={2000} placeholder="Proceso A; Proceso B" /></label>
             <button type="submit" className="ghost">Agregar</button>
           </form>
         )}
+        <datalist id="procesos-catalogo">{processes.map((p) => <option key={p.id} value={p.label} />)}</datalist>
         <div className="tablewrap">
           <table>
-            <thead><tr><th>Código</th><th>Causa</th><th>Factor</th>{canWrite && <th />}</tr></thead>
+            <thead><tr><th>Código</th><th>Causa</th><th>Factor</th><th>Procesos (separados por «;»)</th>{canWrite && <th />}</tr></thead>
             <tbody>
               {cats.causes.map((c) => (
                 <tr key={c.id}>
-                  <td colSpan={canWrite ? 4 : 3} style={{ padding: 0 }}>
+                  <td colSpan={canWrite ? 5 : 4} style={{ padding: 0 }}>
                     <form action={saveCause} className="row" style={{ gap: 6, alignItems: "center", padding: "4px 6px" }}>
                       <input type="hidden" name="id" value={c.id} />
                       <input name="code" defaultValue={c.code} maxLength={30} style={{ width: 90 }} disabled={!canWrite} aria-label="Código" />
                       <input name="description" defaultValue={c.description} maxLength={1000} style={{ flex: 1 }} disabled={!canWrite} aria-label="Causa" />
                       <input name="factor" defaultValue={c.factor?.name ?? ""} maxLength={160} style={{ width: 170 }} disabled={!canWrite} aria-label="Factor" />
+                      <input name="processes" defaultValue={c.processes.map((x) => x.name).join("; ")} maxLength={2000} style={{ width: 240 }}
+                        disabled={!canWrite} aria-label="Procesos" placeholder="Sin procesos" list="procesos-catalogo" />
                       {canWrite && <button type="submit" className="ghost">Guardar</button>}
                     </form>
                   </td>

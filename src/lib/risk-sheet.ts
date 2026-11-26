@@ -59,7 +59,7 @@ export type RiskImportRow = {
   controls?: string[];
   treatment?: string;
   strategy?: string;
-  process?: string;
+  processes?: string[];
   asset_types?: string[];
   probability?: number | null;
   impact?: number | null;
@@ -119,7 +119,10 @@ export function mapRiskRows(
     if (clip(o.treatment, 4000)) row.treatment = String(o.treatment).trim().slice(0, 4000);
     const strat = has.has("strategy") ? parseStrategy(o.strategy) ?? parseStrategyLabel(o.strategy) : null;
     row.strategy = strat ?? parseStrategy(row.treatment) ?? undefined;
-    if (clip(o.process, 160)) row.process = clip(o.process, 160);
+    if (clip(o.process, 2000)) {
+      const procs = [...new Set(String(o.process).split(/[;\n|]+/).map((x) => x.trim().slice(0, 160)).filter((x) => x.length >= 2))];
+      if (procs.length) row.processes = procs;
+    }
     if (has.has("asset_types") && clip(o.asset_types, 5)) {
       const { codes, unknown } = parseAssetTypes(o.asset_types, assetTypes);
       if (unknown.length) {
@@ -255,9 +258,10 @@ export function buildRiskWorkbook(input: {
     "2. El residual lo calcula la plataforma con los controles relacionados: los preventivos y detectivos reducen la probabilidad, los correctivos el impacto, según su efectividad (Débil, Moderado, Fuerte). Solo cuentan los controles implementados o en implementación.",
     "3. Para agregar riesgos nuevos deja vacía la columna ID y llena Cod Riesgo, Riesgo, Cod Causa, Causa, Tipo de riesgo, Factor, Evento de amenaza y Controles relacionados (códigos COTI separados por «;»).",
     "4. Tipo de activo: escribe uno o varios tipos separados por «;» (por ejemplo «Computador portátil; Servidor»), con los nombres de la hoja «Escalas». La ficha de cada activo muestra los escenarios de su tipo. Si dejas la celda vacía, se conservan los tipos que ya tenga el escenario.",
-    "5. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
-    "6. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
-    "7. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
+    "5. Proceso: una causa puede tener varios procesos; escríbelos separados por «;». Los procesos se asocian a la causa y todos los escenarios con esa causa los comparten. Si un proceso no existe, se crea. Si dejas la celda vacía, se conservan los que ya tenga la causa.",
+    "6. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
+    "7. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
+    "8. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
   ].forEach((t) => line(t));
 
   const col = (name: string) => String.fromCharCode(65 + HEADERS.indexOf(name));

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionState } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getPeople, getProcesses } from "@/lib/lookups";
+import { getPeople } from "@/lib/lookups";
 import { getAssetTypes } from "@/lib/asset-lookups";
-import { getMethodology } from "@/lib/risk-data";
+import { getMethodology, getRiskCatalogs } from "@/lib/risk-data";
 import { buildRiskWorkbook, type RiskSheetEntry } from "@/lib/risk-sheet";
 import { buildXlsx } from "@/lib/xlsx-writer";
 
@@ -12,10 +12,10 @@ export async function GET() {
   const state = await getSessionState();
   if (state.status !== "ok" || !state.ctx.can("risks.read")) return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   const supabase = await createClient();
-  const [m, people, processes, types, { data }, { data: links }, { data: typeLinks }] = await Promise.all([
+  const [m, people, cats, types, { data }, { data: links }, { data: typeLinks }] = await Promise.all([
     getMethodology(),
     getPeople(),
-    getProcesses(),
+    getRiskCatalogs(),
     getAssetTypes(),
     supabase.from("risk_entries_view").select("*").eq("active", true).order("code").limit(5000),
     supabase.from("risk_entry_controls").select("entry_id, control:controls(code)").limit(50000),
@@ -26,7 +26,7 @@ export async function GET() {
   const entryTypes = new Map<string, string[]>();
   for (const l of typeLinks ?? []) entryTypes.set(l.entry_id as string, [...(entryTypes.get(l.entry_id as string) ?? []), l.asset_type_id as string]);
   const person = new Map(people.map((p) => [p.id, p.label]));
-  const proc = new Map(processes.map((p) => [p.id, p.label]));
+  const causeProcs = new Map(cats.causes.map((c) => [c.id, c.processes.map((p) => p.name)]));
   const ctrl = new Map<string, string[]>();
   for (const l of (links ?? []) as unknown as { entry_id: string; control: { code: string } | null }[]) {
     if (l.control) ctrl.set(l.entry_id, [...(ctrl.get(l.entry_id) ?? []), l.control.code]);
@@ -36,7 +36,7 @@ export async function GET() {
     category: e.category, factor: e.factor, threat_event: e.threat_event,
     controls: (ctrl.get(e.id) ?? []).sort((a, b) => a.localeCompare(b, "es", { numeric: true })),
     treatment_description: e.treatment_description, treatment_strategy: e.treatment_strategy,
-    process: e.process_id ? proc.get(e.process_id) ?? null : null,
+    process: (causeProcs.get(e.cause_id as string) ?? []).join("; ") || null,
     asset_types: (entryTypes.get(e.id) ?? []).sort((a, b) => (typeOrder.get(a) ?? 0) - (typeOrder.get(b) ?? 0))
       .map((t) => typeName.get(t)).filter((t): t is string => Boolean(t)),
     owner: e.owner_id ? person.get(e.owner_id) ?? null : e.owner_text,

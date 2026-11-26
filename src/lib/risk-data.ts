@@ -33,12 +33,19 @@ export async function getRiskCatalogs() {
   const supabase = await createClient();
   const [risks, causes, categories] = await Promise.all([
     supabase.from("risks").select("id, code, name, dimension").eq("active", true).order("code"),
-    supabase.from("risk_causes").select("id, code, description, factor:risk_factors(name)").eq("active", true).order("code"),
+    supabase.from("risk_causes").select("id, code, description, factor:risk_factors(name), risk_cause_processes(process:processes(id, name))").eq("active", true).order("code"),
     supabase.from("risk_categories").select("id, name, appetite, tolerance").eq("active", true).order("name"),
   ]);
   return {
     risks: (risks.data ?? []) as { id: string; code: string; name: string; dimension: string | null }[],
-    causes: (causes.data ?? []) as unknown as { id: string; code: string; description: string; factor: { name: string } | null }[],
+    causes: ((causes.data ?? []) as unknown as {
+      id: string; code: string; description: string; factor: { name: string } | null;
+      risk_cause_processes: { process: { id: string; name: string } | null }[] | null;
+    }[]).map(({ risk_cause_processes, ...c }) => ({
+      ...c,
+      processes: (risk_cause_processes ?? []).map((x) => x.process).filter((x): x is { id: string; name: string } => Boolean(x))
+        .sort((a, b) => a.name.localeCompare(b.name, "es")),
+    })),
     categories: (categories.data ?? []) as { id: string; name: string; appetite: number | null; tolerance: number | null }[],
   };
 }
