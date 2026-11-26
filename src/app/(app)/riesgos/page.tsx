@@ -4,7 +4,9 @@ import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getProcesses } from "@/lib/lookups";
 import { getMethodology, getRiskCatalogs } from "@/lib/risk-data";
-import { inkFor, riskKpis, STRATEGIES } from "@/lib/risk";
+import { riskKpis, STRATEGIES } from "@/lib/risk";
+import { getAssetTypes } from "@/lib/asset-lookups";
+import Zone from "@/components/zone-tag";
 import { label } from "@/lib/labels";
 import Flash from "@/components/flash";
 import HeatMap from "@/components/heat-map";
@@ -14,7 +16,7 @@ export const metadata: Metadata = { title: "Riesgos" };
 
 type SP = {
   error?: string; ok?: string; vista?: string; riesgo?: string; categoria?: string; proceso?: string;
-  estado?: string; zona?: string; q?: string; p?: string; i?: string;
+  estado?: string; zona?: string; q?: string; p?: string; i?: string; activo?: string;
 };
 
 type EntryRow = {
@@ -30,10 +32,12 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const ctx = await requirePermission("risks.read");
   const sp = await searchParams;
   const supabase = await createClient();
-  const [m, cats, processes, { data }] = await Promise.all([
+  const [m, cats, processes, types, { data: typeLinks }, { data }] = await Promise.all([
     getMethodology(),
     getRiskCatalogs(),
     getProcesses(),
+    getAssetTypes(),
+    supabase.from("risk_entry_asset_types").select("entry_id, asset_type_id").limit(50000),
     supabase
       .from("risk_entries_view")
       .select("id, code, risk_code, risk_name, cause_code, cause, category, category_id, risk_id, process_id, threat_event, inherent_probability, inherent_impact, inherent_score, inherent_zone, inherent_color, residual_probability, residual_impact, residual_score, residual_zone, residual_color, out_of_tolerance, has_treatment, accepted_at, treatment_strategy, controls_count, materialized_count, owner_id, owner_text")
@@ -45,12 +49,18 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const vista = sp.vista === "inherente" ? "inherente" : "residual";
   const k = riskKpis(all);
   const processName = new Map(processes.map((p) => [p.id, p.label]));
+  const typeName = new Map(types.map((t) => [t.id, t.label]));
+  const entryTypes = new Map<string, string[]>();
+  for (const l of typeLinks ?? []) {
+    entryTypes.set(l.entry_id as string, [...(entryTypes.get(l.entry_id as string) ?? []), l.asset_type_id as string]);
+  }
 
   const q = (sp.q ?? "").trim().toLowerCase();
   const rows = all.filter((e) => {
     if (sp.riesgo && e.risk_id !== sp.riesgo) return false;
     if (sp.categoria && e.category_id !== sp.categoria) return false;
     if (sp.proceso && e.process_id !== sp.proceso) return false;
+    if (sp.activo && !(entryTypes.get(e.id) ?? []).includes(sp.activo)) return false;
     if (sp.estado === "sin_valorar" && e.residual_score !== null) return false;
     if (sp.estado === "fuera" && !e.out_of_tolerance) return false;
     if (sp.estado === "sin_tratamiento" && !(e.out_of_tolerance && !e.has_treatment && !e.accepted_at)) return false;
@@ -143,6 +153,12 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
               </select>
             </label>
           )}
+          <label>Tipo de activo
+            <select name="activo" defaultValue={sp.activo ?? ""}>
+              <option value="">Todos</option>
+              {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </label>
           <label>Estado
             <select name="estado" defaultValue={sp.estado ?? ""}>
               <option value="">Todos</option>
@@ -159,13 +175,13 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
           </label>
           <label style={{ flex: 1, minWidth: 180 }}>Buscar<input name="q" defaultValue={sp.q ?? ""} placeholder="Código, causa, evento…" /></label>
           <button type="submit" className="ghost">Filtrar</button>
-          {(sp.riesgo || sp.categoria || sp.proceso || sp.estado || sp.zona || sp.q || sp.p) && <Link className="small" href="/riesgos#registro">Quitar filtros</Link>}
+          {(sp.riesgo || sp.categoria || sp.proceso || sp.activo || sp.estado || sp.zona || sp.q || sp.p) && <Link className="small" href="/riesgos#registro">Quitar filtros</Link>}
         </form>
         <p className="small muted">{rows.length} de {all.length} riesgos{sp.p && sp.i ? ` · celda probabilidad ${sp.p} × impacto ${sp.i}` : ""}.</p>
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Riesgo</th><th>Causa</th><th>Tipo</th><th>Proceso</th><th>Controles</th><th>Inherente</th><th>Residual</th><th>Tratamiento</th></tr>
+              <tr><th>ID</th><th>Riesgo</th><th>Causa</th><th>Tipo</th><th>Tipos de activo</th><th>Proceso</th><th>Controles</th><th>Inherente</th><th>Residual</th><th>Tratamiento</th></tr>
             </thead>
             <tbody>
               {rows.slice(0, 1000).map((e) => (
@@ -174,6 +190,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
                   <td className="small"><b>{e.risk_code}</b> {e.risk_name.length > 70 ? `${e.risk_name.slice(0, 70)}…` : e.risk_name}</td>
                   <td className="small">{e.cause_code ? <b>{e.cause_code} </b> : null}{e.cause ?? "—"}</td>
                   <td className="small">{e.category ?? "—"}</td>
+                  <td className="small">{(entryTypes.get(e.id) ?? []).map((t) => typeName.get(t)).filter(Boolean).join(", ") || "—"}</td>
                   <td className="small">{e.process_id ? processName.get(e.process_id) : "—"}</td>
                   <td className="small">{e.controls_count}</td>
                   <td><Zone name={e.inherent_zone} color={e.inherent_color} score={e.inherent_score} /></td>
@@ -186,7 +203,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
                 </tr>
               ))}
               {!all.length && (
-                <tr><td colSpan={9} className="small muted">No hay riesgos registrados. Carga tu archivo de causas y riesgos con «Cargar desde Excel» o registra uno.</td></tr>
+                <tr><td colSpan={10} className="small muted">No hay riesgos registrados. Carga tu archivo de causas y riesgos con «Cargar desde Excel» o registra uno.</td></tr>
               )}
             </tbody>
           </table>
@@ -197,7 +214,3 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function Zone({ name, color, score }: { name: string | null; color: string | null; score: number | null }) {
-  if (!name || !color) return <span className="small muted">Sin valorar</span>;
-  return <span className="zone" style={{ background: color, color: inkFor(color) }}>{name} · {Number(score)}</span>;
-}

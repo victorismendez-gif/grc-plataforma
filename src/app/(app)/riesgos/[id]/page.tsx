@@ -28,14 +28,16 @@ export default async function RiskPage({ params, searchParams }: Props) {
   const supabase = await createClient();
   const { data: e } = await supabase.from("risk_entries_view").select("*").eq("id", id).maybeSingle();
   if (!e) notFound();
-  const [current, used, people, { data: links }, { data: controls }, { data: acts }] = await Promise.all([
+  const [current, used, people, { data: links }, { data: controls }, { data: acts }, { data: typeLinks }] = await Promise.all([
     getMethodology(),
     e.methodology_id ? getMethodologyById(e.methodology_id as string) : Promise.resolve(null),
     getPeople(),
     supabase.from("risk_entry_controls").select("control_id").eq("entry_id", id),
     ctx.can("controls.read") ? supabase.from("controls").select("id, code, name, control_type, design_rating, application_rating, effectiveness_rating, implementation_status").eq("active", true).order("code") : Promise.resolve({ data: [] }),
     ctx.can("plans.read") ? supabase.from("actions").select("id, plan_id, title, status, due_on").eq("risk_entry_id", id).order("created_at") : Promise.resolve({ data: [] }),
+    supabase.from("risk_entry_asset_types").select("asset_type_id").eq("entry_id", id),
   ]);
+  const asset_type_ids = (typeLinks ?? []).map((t) => t.asset_type_id as string);
   const m: Methodology = used ?? current;
   const linked = new Set((links ?? []).map((l) => l.control_id as string));
   const ctrlList = (controls ?? []) as Ctrl[];
@@ -184,7 +186,7 @@ export default async function RiskPage({ params, searchParams }: Props) {
 
       <section className="panel" style={{ marginTop: 16 }}>
         <h2>Datos del riesgo</h2>
-        <EntryForm entry={e as EntryValues} action={updateEntry} readOnly={!canWrite} />
+        <EntryForm entry={{ ...(e as EntryValues), asset_type_ids }} action={updateEntry} readOnly={!canWrite} />
       </section>
     </>
   );

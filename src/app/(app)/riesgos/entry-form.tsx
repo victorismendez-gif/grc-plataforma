@@ -6,7 +6,7 @@ import ComboField from "@/components/combo-field";
 
 export type EntryValues = {
   id?: string; risk_id?: string; cause_id?: string | null; category_id?: string | null; threat_event?: string | null;
-  consequence?: string | null; process_id?: string | null; asset_type_id?: string | null; owner_id?: string | null;
+  consequence?: string | null; process_id?: string | null; asset_type_ids?: string[]; owner_id?: string | null;
   owner_text?: string | null; treatment_strategy?: string | null; treatment_description?: string | null;
 };
 
@@ -43,14 +43,16 @@ export default async function EntryForm({ entry, action, readOnly, withEvaluatio
             </select>
           </label>
           <ComboField name="process" label="Proceso" value={processValue} options={processes} placeholder="Elige o escribe un proceso" />
-          <label>
-            Tipo de activo afectado
-            <select name="asset_type_id" defaultValue={entry?.asset_type_id ?? ""}>
-              <option value="">—</option>
-              {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-          </label>
           <ComboField name="owner" label="Responsable del riesgo" value={ownerValue} options={people} placeholder="Elige o escribe un nombre" />
+          <fieldset className="span-all checks">
+            <legend>Tipos de activo afectados</legend>
+            {types.map((t) => (
+              <label key={t.id} className="check">
+                <input type="checkbox" name="asset_type_ids" value={t.id} defaultChecked={entry?.asset_type_ids?.includes(t.id)} />
+                {t.label}
+              </label>
+            ))}
+          </fieldset>
           <label className="span-all">Evento de amenaza<textarea name="threat_event" rows={2} maxLength={2000} defaultValue={entry?.threat_event ?? ""} /></label>
           <label className="span-all">Consecuencia<textarea name="consequence" rows={2} maxLength={2000} defaultValue={entry?.consequence ?? ""} placeholder="Qué pasa si el riesgo se materializa" /></label>
           <label>

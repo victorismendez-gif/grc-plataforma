@@ -10,6 +10,27 @@ import { getMethodology } from "@/lib/risk-data";
 import { STRATEGIES, type Level, type Zone } from "@/lib/risk";
 import { mapRiskRows } from "@/lib/risk-sheet";
 import { keysOf } from "@/lib/labels";
+import { getAssetTypes } from "@/lib/asset-lookups";
+
+/** Deja el escenario vinculado exactamente a los tipos de activo marcados. */
+async function syncAssetTypes(entryId: string, orgId: string, fd: FormData, path: string) {
+  const valid = new Set((await getAssetTypes()).map((t) => t.id));
+  const wanted = [...new Set(fd.getAll("asset_type_ids").map(String))].filter((id) => isUuid(id) && valid.has(id));
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("risk_entry_asset_types").select("asset_type_id").eq("entry_id", entryId);
+  const have = new Set((current ?? []).map((r) => r.asset_type_id as string));
+  const remove = [...have].filter((id) => !wanted.includes(id));
+  const add = wanted.filter((id) => !have.has(id));
+  if (remove.length) {
+    const { error } = await supabase.from("risk_entry_asset_types").delete().eq("entry_id", entryId).in("asset_type_id", remove);
+    if (error) fail(path, dbMessage(error, "No se pudieron actualizar los tipos de activo."));
+  }
+  if (add.length) {
+    const { error } = await supabase.from("risk_entry_asset_types")
+      .insert(add.map((asset_type_id) => ({ organization_id: orgId, entry_id: entryId, asset_type_id })));
+    if (error) fail(path, dbMessage(error, "No se pudieron guardar los tipos de activo."));
+  }
+}
 
 const BASE = "/riesgos";
 
@@ -27,7 +48,6 @@ async function entryRecord(fd: FormData, path: string) {
     threat_event: optText(fd, "threat_event", 2000),
     consequence: optText(fd, "consequence", 2000),
     process_id: proc.id,
-    asset_type_id: optUuid(fd, "asset_type_id"),
     owner_id: owner.id,
     owner_text: owner.text,
     treatment_strategy: (keysOf(STRATEGIES) as string[]).includes(strategy) ? strategy : null,
@@ -41,6 +61,7 @@ export async function createEntry(formData: FormData) {
   const supabase = await createClient();
   const { data, error } = await supabase.from("risk_entries").insert({ ...rec, organization_id: ctx.organization.id }).select("id, code").single();
   if (error || !data) fail(`${BASE}/nuevo`, dbMessage(error, "No se pudo registrar el riesgo."));
+  await syncAssetTypes(data.id, ctx.organization.id, formData, `${BASE}/${data.id}`);
   const p = optInt(formData, "probability", 1, 6);
   const i = optInt(formData, "impact", 1, 6);
   if (p && i) await supabase.rpc("risk_evaluate", { p_entry: data.id, p_probability: p, p_impact: i });
@@ -49,13 +70,14 @@ export async function createEntry(formData: FormData) {
 }
 
 export async function updateEntry(formData: FormData) {
-  await requirePermission("risks.write");
+  const ctx = await requirePermission("risks.write");
   const id = optUuid(formData, "id");
   if (!id) fail(BASE, "Riesgo no válido.");
   const rec = await entryRecord(formData, `${BASE}/${id}`);
   const supabase = await createClient();
   const { error } = await supabase.from("risk_entries").update(rec).eq("id", id);
   if (error) fail(`${BASE}/${id}`, dbMessage(error, "No se pudo guardar."));
+  await syncAssetTypes(id, ctx.organization.id, formData, `${BASE}/${id}`);
   revalidatePath(BASE);
   done(`${BASE}/${id}`, "Datos del riesgo guardados.");
 }
@@ -254,8 +276,9 @@ export async function importRisks(raw: Record<string, unknown>[], apply: boolean
   if (raw.length > 5000) return { ok: false, errors: ["El archivo supera 5.000 filas."] };
   const m = await getMethodology();
   const supabase = await createClient();
-  const { data: ctrls } = await supabase.from("controls").select("code");
-  const mapped = mapRiskRows(raw, m, (ctrls ?? []).map((c) => c.code as string), headerLine);
+  const [{ data: ctrls }, types] = await Promise.all([supabase.from("controls").select("code"), getAssetTypes()]);
+  const mapped = mapRiskRows(raw, m, (ctrls ?? []).map((c) => c.code as string), headerLine,
+    types.map((t) => ({ code: t.code, label: t.label })));
   if (mapped.errors.length) return { ok: false, errors: mapped.errors, warnings: mapped.warnings };
   if (!mapped.rows.length) return { ok: false, errors: ["El archivo no tiene filas con riesgos."], warnings: mapped.warnings };
   const { data, error } = await supabase.rpc("risk_import", { p_rows: mapped.rows, p_apply: apply });

@@ -5,7 +5,7 @@ import { STYLE, type Cell, type Workbook } from "@/lib/xlsx-writer";
 
 type Field =
   | "code" | "risk_code" | "risk_name" | "cause_code" | "cause" | "category" | "factor" | "event"
-  | "controls" | "treatment" | "strategy" | "process" | "probability" | "impact";
+  | "controls" | "treatment" | "strategy" | "process" | "asset_types" | "probability" | "impact";
 
 const EXACT: Record<Field, string[]> = {
   code: ["id", "idregistro", "codigoregistro", "registro"],
@@ -20,6 +20,7 @@ const EXACT: Record<Field, string[]> = {
   treatment: ["tratamientoposible", "tratamiento", "descripciontratamiento", "plandetratamiento"],
   strategy: ["estrategia", "estrategiadetratamiento", "opciondetratamiento"],
   process: ["proceso", "procesoasociado"],
+  asset_types: ["tipodeactivo", "tiposdeactivo", "tipoactivo", "tiposactivo", "tipodeactivoafectado", "tiposdeactivoafectados", "activosafectados", "activoafectado"],
   probability: ["probabilidad", "probabilidadinherente"],
   impact: ["impacto", "impactoinherente"],
 };
@@ -59,6 +60,7 @@ export type RiskImportRow = {
   treatment?: string;
   strategy?: string;
   process?: string;
+  asset_types?: string[];
   probability?: number | null;
   impact?: number | null;
 };
@@ -70,6 +72,7 @@ export function mapRiskRows(
   m: Pick<Methodology, "probability_levels" | "impact_levels">,
   knownControls: string[],
   headerLine = 1,
+  assetTypes: AssetTypeRef[] = [],
 ): { rows: RiskImportRow[]; errors: string[]; warnings: string[] } {
   const headers = [...new Set(raw.flatMap((r) => Object.keys(r)))];
   const map = detectRiskColumns(headers);
@@ -117,6 +120,14 @@ export function mapRiskRows(
     const strat = has.has("strategy") ? parseStrategy(o.strategy) ?? parseStrategyLabel(o.strategy) : null;
     row.strategy = strat ?? parseStrategy(row.treatment) ?? undefined;
     if (clip(o.process, 160)) row.process = clip(o.process, 160);
+    if (has.has("asset_types") && clip(o.asset_types, 5)) {
+      const { codes, unknown } = parseAssetTypes(o.asset_types, assetTypes);
+      if (unknown.length) {
+        errors.push(`Fila ${line}: tipo de activo no reconocido: ${unknown.map((u) => `«${clip(u, 40)}»`).join(", ")}. Usa los nombres de la hoja «Escalas».`);
+        return;
+      }
+      if (codes.length) row.asset_types = codes;
+    }
     if (has.has("probability") || has.has("impact")) {
       const p = parseLevel(o.probability, m.probability_levels as Level[]);
       const i = parseLevel(o.impact, m.impact_levels as Level[]);
@@ -144,6 +155,26 @@ export function mapRiskRows(
   return { rows, errors: errors.slice(0, 200), warnings: warnings.slice(0, 100) };
 }
 
+export type AssetTypeRef = { code: string; label: string };
+
+const singular = (n: string) => n.replace(/(es|s)$/, "");
+
+/** «Computador portátil; Servidor» → códigos del catálogo de tipos de activo. */
+export function parseAssetTypes(text: unknown, types: AssetTypeRef[]): { codes: string[]; unknown: string[] } {
+  const codes = new Set<string>();
+  const unknown: string[] = [];
+  for (const part of String(text ?? "").split(/[;\n|]+/)) {
+    const t = part.trim();
+    if (!t) continue;
+    const n = normalize(t);
+    const hit = types.find((x) => normalize(x.label) === n || normalize(x.code) === n)
+      ?? types.find((x) => singular(normalize(x.label)) === singular(n));
+    if (hit) codes.add(hit.code);
+    else unknown.push(t);
+  }
+  return { codes: [...codes], unknown };
+}
+
 function parseStrategyLabel(v: unknown) {
   const n = normalize(String(v ?? ""));
   return (Object.entries(STRATEGIES).find(([, label]) => normalize(label) === n)?.[0] as keyof typeof STRATEGIES | undefined) ?? null;
@@ -155,7 +186,7 @@ function parseStrategyLabel(v: unknown) {
 export type RiskSheetEntry = {
   code: string; risk_code: string; risk_name: string; cause_code: string | null; cause: string | null;
   category: string | null; factor: string | null; threat_event: string | null; controls: string[];
-  treatment_description: string | null; treatment_strategy: string | null; process: string | null; owner: string | null;
+  treatment_description: string | null; treatment_strategy: string | null; process: string | null; asset_types: string[]; owner: string | null;
   inherent_probability: number | null; inherent_impact: number | null; inherent_score: number | null; inherent_zone: string | null;
   residual_probability: number | null; residual_impact: number | null; residual_score: number | null; residual_zone: string | null;
   out_of_tolerance: boolean; accepted: boolean;
@@ -163,11 +194,13 @@ export type RiskSheetEntry = {
 
 const HEADERS = [
   "ID", "Cod Riesgo", "Riesgo", "Cod Causa", "Causa", "Tipo de riesgo", "Factor de riesgo", "Evento de amenaza",
-  "Controles relacionados", "Tratamiento", "Estrategia", "Proceso", "Responsable", "Probabilidad", "Impacto",
+  "Controles relacionados", "Tratamiento", "Estrategia", "Proceso", "Tipo de activo", "Responsable", "Probabilidad", "Impacto",
   "Riesgo inherente", "Zona inherente", "Riesgo residual", "Zona residual", "Fuera de tolerancia",
 ];
 
-export function buildRiskWorkbook(input: { orgName: string; brandColor?: string; m: Methodology; entries: RiskSheetEntry[]; generatedAt?: Date }): Workbook {
+export function buildRiskWorkbook(input: {
+  orgName: string; brandColor?: string; m: Methodology; entries: RiskSheetEntry[]; assetTypes?: string[]; generatedAt?: Date;
+}): Workbook {
   const { m } = input;
   const date = (input.generatedAt ?? new Date()).toISOString().slice(0, 10);
   const pLabels = m.probability_levels.map((l) => `${l.level} - ${l.name}`);
@@ -180,7 +213,7 @@ export function buildRiskWorkbook(input: { orgName: string; brandColor?: string;
       e.category, e.factor, e.threat_event ? { v: e.threat_event, s: STYLE.wrap } : null,
       e.controls.join("; "), e.treatment_description ? { v: e.treatment_description, s: STYLE.wrap } : null,
       e.treatment_strategy ? (STRATEGIES as Record<string, string>)[e.treatment_strategy] : null,
-      e.process, e.owner,
+      e.process, e.asset_types.length ? { v: e.asset_types.join("; "), s: STYLE.wrap } : null, e.owner,
       e.inherent_probability ? pLabels[e.inherent_probability - 1] ?? e.inherent_probability : null,
       e.inherent_impact ? iLabels[e.inherent_impact - 1] ?? e.inherent_impact : null,
       e.inherent_score, e.inherent_zone, e.residual_score, e.residual_zone,
@@ -204,6 +237,10 @@ export function buildRiskWorkbook(input: { orgName: string; brandColor?: string;
     [],
     [{ v: "Zona", s: STYLE.header }, { v: "Desde", s: STYLE.header }, { v: "Color", s: STYLE.header }],
     ...[...m.zones].sort((a, b) => a.min - b.min).map((z) => [z.name, z.min, z.color] as Cell[]),
+    ...(input.assetTypes?.length
+      ? [[], [{ v: "Tipos de activo", s: STYLE.header }, { v: "Nombre para la columna «Tipo de activo»", s: STYLE.header }] as Cell[],
+         ...input.assetTypes.map((t, k) => [k + 1, t] as Cell[])]
+      : []),
   ];
 
   const ins: Cell[][] = [];
@@ -217,9 +254,10 @@ export function buildRiskWorkbook(input: { orgName: string; brandColor?: string;
     "1. Para valorar: elige Probabilidad e Impacto (listas desplegables) en la hoja «Registro» y carga el archivo en Riesgos → «Cargar desde Excel». La plataforma calcula el riesgo inherente y el residual.",
     "2. El residual lo calcula la plataforma con los controles relacionados: los preventivos y detectivos reducen la probabilidad, los correctivos el impacto, según su efectividad (Débil, Moderado, Fuerte). Solo cuentan los controles implementados o en implementación.",
     "3. Para agregar riesgos nuevos deja vacía la columna ID y llena Cod Riesgo, Riesgo, Cod Causa, Causa, Tipo de riesgo, Factor, Evento de amenaza y Controles relacionados (códigos COTI separados por «;»).",
-    "4. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
-    "5. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
-    "6. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
+    "4. Tipo de activo: escribe uno o varios tipos separados por «;» (por ejemplo «Computador portátil; Servidor»), con los nombres de la hoja «Escalas». La ficha de cada activo muestra los escenarios de su tipo. Si dejas la celda vacía, se conservan los tipos que ya tenga el escenario.",
+    "5. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
+    "6. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
+    "7. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
   ].forEach((t) => line(t));
 
   const col = (name: string) => String.fromCharCode(65 + HEADERS.indexOf(name));
@@ -230,11 +268,11 @@ export function buildRiskWorkbook(input: { orgName: string; brandColor?: string;
         rows,
         columns: [
           { width: 10, style: STYLE.text }, { width: 10, style: STYLE.text }, { width: 44 }, { width: 10, style: STYLE.text }, { width: 44 },
-          { width: 26 }, { width: 18 }, { width: 40 }, { width: 30 }, { width: 50 }, { width: 18 }, { width: 22 }, { width: 22 },
+          { width: 26 }, { width: 18 }, { width: 40 }, { width: 30 }, { width: 50 }, { width: 18 }, { width: 22 }, { width: 26 }, { width: 22 },
           { width: 18 }, { width: 18 }, { width: 10 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 12 },
         ],
         freeze: { rows: 1, cols: 2 },
-        autoFilter: `A1:T${last}`,
+        autoFilter: `A1:U${last}`,
         validations: [
           { sqref: `${col("Probabilidad")}2:${col("Probabilidad")}${last + 500}`, type: "list", formula1: "Lista_P", promptTitle: "Probabilidad", prompt: "Elige el nivel" },
           { sqref: `${col("Impacto")}2:${col("Impacto")}${last + 500}`, type: "list", formula1: "Lista_I", promptTitle: "Impacto", prompt: "Elige el nivel" },

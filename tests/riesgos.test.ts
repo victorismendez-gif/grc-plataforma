@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { heatMap, parseControlCodes, parseLevel, parseStrategy, riskKpis, score, zoneFor, type Methodology } from "@/lib/risk";
-import { buildRiskWorkbook, detectRiskColumns, mapRiskRows } from "@/lib/risk-sheet";
+import { buildRiskWorkbook, detectRiskColumns, mapRiskRows, parseAssetTypes } from "@/lib/risk-sheet";
 import { buildXlsx } from "@/lib/xlsx-writer";
 
 const lv = (n: number) => Array.from({ length: n }, (_, k) => ({ level: k + 1, name: ["Rara vez", "Improbable", "Posible", "Probable", "Casi seguro"][k] }));
@@ -65,12 +65,25 @@ describe("lectura del archivo de causas y riesgos", () => {
   it("exporta el registro con escalas y listas", () => {
     const wb = buildRiskWorkbook({ orgName: "Org", m: M, entries: [{
       code: "RG-0001", risk_code: "R1", risk_name: "Divulgación", cause_code: "CAU01", cause: "Error", category: "TI", factor: "Personas",
-      threat_event: "Error humano", controls: ["COTI-1"], treatment_description: "Mitigar", treatment_strategy: "mitigar", process: null, owner: null,
+      threat_event: "Error humano", controls: ["COTI-1"], treatment_description: "Mitigar", treatment_strategy: "mitigar", process: null, asset_types: ["Servidor"], owner: null,
       inherent_probability: 4, inherent_impact: 5, inherent_score: 20, inherent_zone: "Extremo", residual_probability: 2, residual_impact: 4,
       residual_score: 8, residual_zone: "Moderado", out_of_tolerance: false, accepted: false }] });
     expect(wb.sheets.map((s) => s.name)).toEqual(["Registro", "Escalas", "Instrucciones", "Listas"]);
     expect(buildXlsx(wb).length).toBeGreaterThan(1500);
     const back = mapRiskRows([{ ID: "RG-0001", "Cod Riesgo": "R1", Probabilidad: "4 - Probable", Impacto: "5 - Casi seguro" }], M, []);
     expect(back.rows[0]).toMatchObject({ code: "RG-0001", probability: 4, impact: 5 });
+  });
+  it("lee los tipos de activo separados por punto y coma", () => {
+    const T = [{ code: "portatil", label: "Computador portátil" }, { code: "servidor", label: "Servidor" }];
+    expect(parseAssetTypes("computador portatil; Servidores", T)).toEqual({ codes: ["portatil", "servidor"], unknown: [] });
+    expect(parseAssetTypes("Servidor; Impresora", T).unknown).toEqual(["Impresora"]);
+    const res = mapRiskRows([
+      { ID: "RG-0001", "Cod Riesgo": "R1", "Tipo de activo": "Servidor; Computador portátil" },
+      { ID: "RG-0002", "Cod Riesgo": "R1", "Tipo de activo": "" },
+      { ID: "RG-0003", "Cod Riesgo": "R1", "Tipo de activo": "Nevera" },
+    ], M, [], 1, T);
+    expect(res.rows[0].asset_types).toEqual(["servidor", "portatil"]);
+    expect(res.rows[1].asset_types).toBeUndefined();
+    expect(res.errors[0]).toMatch(/Fila 4: tipo de activo no reconocido: «Nevera»/);
   });
 });

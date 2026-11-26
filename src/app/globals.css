@@ -133,3 +133,5 @@ pre.diff { white-space: pre-wrap; word-break: break-word; margin: 0; font-family
 .heat td { height: 44px; text-align: center; font-weight: 700; font-size: 16px; border-radius: 4px; }
 .heat td a { text-decoration: none; display: block; }
 .zone { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+fieldset.checks { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+fieldset.checks legend { font-weight: 600; padding: 0 4px; }

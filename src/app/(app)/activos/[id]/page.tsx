@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ASSET_CRITICALITY, IMPLEMENTATION, label, level5Tone } from "@/lib/labels";
+import Zone from "@/components/zone-tag";
 import Flash from "@/components/flash";
 import AssetForm, { type AssetData } from "../asset-form";
 import { updateAsset } from "../actions";
@@ -31,6 +32,24 @@ export default async function AssetPage({ params, searchParams }: Props) {
     .eq("record_id", id)
     .order("id", { ascending: false })
     .limit(20);
+
+  type RiskRow = {
+    id: string; code: string; active: boolean; inherent_score: number | null; inherent_zone: string | null; inherent_color: string | null;
+    residual_score: number | null; residual_zone: string | null; residual_color: string | null;
+    risk: { code: string; name: string } | null; cause: { code: string; description: string } | null;
+  };
+  let risks: RiskRow[] = [];
+  if (ctx.can("risks.read") && asset.asset_type_id) {
+    const { data: rl } = await supabase
+      .from("risk_entry_asset_types")
+      .select("entry:risk_entries(id, code, active, inherent_score, inherent_zone, inherent_color, residual_score, residual_zone, residual_color, risk:risks(code, name), cause:risk_causes(code, description))")
+      .eq("asset_type_id", asset.asset_type_id)
+      .limit(2000);
+    risks = ((rl ?? []) as unknown as { entry: RiskRow | null }[])
+      .map((r) => r.entry)
+      .filter((e): e is RiskRow => Boolean(e?.active))
+      .sort((a, b) => (Number(b.residual_score ?? -1) - Number(a.residual_score ?? -1)) || (Number(b.inherent_score ?? -1) - Number(a.inherent_score ?? -1)) || a.code.localeCompare(b.code));
+  }
 
   const attrs = Object.entries((asset.attributes as Record<string, string>) ?? {});
   const controls = ((asset.control_assets as { control: { id: string; code: string; name: string; implementation_status: string } | null }[]) ?? [])
@@ -85,6 +104,43 @@ export default async function AssetPage({ params, searchParams }: Props) {
           )}
         </section>
       </div>
+
+      {ctx.can("risks.read") && (
+        <section className="panel">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2>Escenarios de riesgo de este tipo de activo</h2>
+            {risks.length > 0 && <Link className="small" href={`/riesgos?activo=${asset.asset_type_id}#registro`}>Ver en Riesgos →</Link>}
+          </div>
+          {risks.length ? (
+            <div className="tablewrap">
+              <table>
+                <thead><tr><th>ID</th><th>Riesgo</th><th>Causa</th><th>Inherente</th><th>Residual</th></tr></thead>
+                <tbody>
+                  {risks.slice(0, 50).map((r) => (
+                    <tr key={r.id}>
+                      <td className="mono"><Link href={`/riesgos/${r.id}`}>{r.code}</Link></td>
+                      <td className="small"><b>{r.risk?.code}</b> {r.risk && r.risk.name.length > 70 ? `${r.risk.name.slice(0, 70)}…` : r.risk?.name}</td>
+                      <td className="small">{r.cause ? <><b>{r.cause.code}</b> {r.cause.description}</> : "—"}</td>
+                      <td><Zone name={r.inherent_zone} color={r.inherent_color} score={r.inherent_score} /></td>
+                      <td><Zone name={r.residual_zone} color={r.residual_color} score={r.residual_score} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="small muted">
+                {risks.length} escenario{risks.length === 1 ? "" : "s"} aplica{risks.length === 1 ? "" : "n"} a este tipo de activo
+                {risks.length > 50 ? "; se muestran los 50 de mayor riesgo residual" : ""}.
+              </p>
+            </div>
+          ) : (
+            <p className="small muted">
+              {asset.asset_type_id
+                ? "Ningún escenario de riesgo está vinculado a este tipo de activo. Se vinculan en la ficha del riesgo o con la columna «Tipo de activo» de la plantilla de riesgos."
+                : "El activo no tiene tipo; asígnale uno para ver sus escenarios de riesgo."}
+            </p>
+          )}
+        </section>
+      )}
 
       {history && history.length > 0 && (
         <section className="panel">
