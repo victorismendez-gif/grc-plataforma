@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(9);
+select plan(11);
 
 insert into auth.users (id, email, aud, role) values
   ('d3000000-0000-4000-8000-000000000001', 'admin@cpa.test', 'authenticated', 'authenticated'),
@@ -35,6 +35,11 @@ select is((select string_agg(p.name, ',' order by p.name) from public.risk_cause
 
 select is(jsonb_array_length(public.risk_import('[{"line":2,"risk_code":"R3","risk_name":"Sin causa","processes":["Compras"]}]'::jsonb, false) -> 'errores'), 1,
           'Sin causa no se pueden asociar procesos');
+
+select lives_ok($$ select public.risk_import('[{"line":2,"code":"RG-0002","process":"Compras; Archivo"}]'::jsonb, true) $$,
+                'Acepta el proceso como texto con varios separados por punto y coma');
+select is((select string_agg(p.name, ',' order by p.name) from public.risk_cause_processes cp join public.processes p on p.id = cp.process_id),
+          'Archivo,Compras', 'Separa los procesos del texto');
 
 select set_config('request.jwt.claims', '{"sub":"d3000000-0000-4000-8000-000000000002","aal":"aal2","email":"otro@cpb.test"}', true);
 select is((select count(*)::int from public.risk_cause_processes), 0, 'Aislamiento entre organizaciones');
