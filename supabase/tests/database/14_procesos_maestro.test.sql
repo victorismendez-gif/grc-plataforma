@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(16);
+select plan(17);
 
 insert into auth.users (id, email, aud, role) values
   ('d4000000-0000-4000-8000-000000000001', 'admin@pma.test', 'authenticated', 'authenticated'),
@@ -44,6 +44,7 @@ select is((select pr.code from public.documents d join public.processes pr on pr
 select is((select doc_type from public.documents where code = 'V-01'), 'video', 'Tipología con plural y espacios');
 select is((select count(*)::int from public.documents where code = 'D-SUBP-DO&M-003-01' and process_id is null), 1, 'Admite códigos con & y queda sin proceso si el padre no existe');
 
+select is(app.master_typology('Manual de usuario RPA'), 'manual_rpa', 'Manual de usuario RPA es su propia tipología');
 select is(jsonb_array_length(public.process_master_import('[{"line":2,"code":"X-1","name":"Algo","typology":"Nevera"}]', false) -> 'errores'), 1, 'Rechaza tipologías desconocidas');
 select throws_ok($$ update public.processes set parent_id = (select id from public.processes where code = 'SUBP-GSI-005') where code = 'PROC-GSI-004' $$,
                  '23514', null, 'Sin ciclos entre procesos');

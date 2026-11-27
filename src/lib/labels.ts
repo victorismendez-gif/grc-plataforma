@@ -42,26 +42,28 @@ export const IMPLEMENTATION = {
 export const RATINGS = { 1: "Débil", 2: "Moderado", 3: "Fuerte" } as const;
 export const DOCUMENTATION = { documentado: "Documentado", sin_documentar: "Sin documentar" } as const;
 export const EVIDENCE = { con_registro: "Con registro", sin_registro: "Sin registro" } as const;
+/** Tipologías documentales del listado maestro (las de proceso están en PROCESS_TYPOLOGY). */
 export const DOC_TYPES = {
-  politica: "Política",
-  manual: "Manual",
-  procedimiento: "Procedimiento",
-  instructivo: "Instructivo",
-  formato: "Formato",
-  plan: "Plan",
-  registro: "Registro",
   anexo: "Anexo",
   diagrama: "Diagrama",
-  modelamiento: "Modelamiento",
-  presentacion: "Presentación",
-  protocolo: "Protocolo",
-  video: "Video",
   elearning: "E-learning",
-  programa: "Programa",
-  infografia: "Infografía",
-  matriz: "Matriz",
-  reglamento: "Reglamento",
   entorno: "Entorno empresarial",
+  formato: "Formato",
+  infografia: "Infografía",
+  instructivo: "Instructivo",
+  manual: "Manual",
+  manual_rpa: "Manual de usuario RPA",
+  matriz: "Matriz de riesgo",
+  modelamiento: "Modelamiento",
+  plan: "Plan",
+  politica: "Política",
+  presentacion: "Presentaciones",
+  procedimiento: "Procedimiento",
+  programa: "Programa",
+  protocolo: "Protocolo",
+  registro: "Registro",
+  reglamento: "Reglamento",
+  video: "Videos",
   otro: "Otro",
 } as const;
 export const VERSION_STATUS = {
