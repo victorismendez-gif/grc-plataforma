@@ -86,6 +86,14 @@ describe("lectura del archivo de causas y riesgos", () => {
     expect(res.rows[1].asset_types).toBeUndefined();
     expect(res.errors[0]).toMatch(/Fila 4: tipo de activo no reconocido: «Nevera»/);
   });
+  it("lee el responsable y rechaza textos muy largos", () => {
+    const res = mapRiskRows([
+      { ID: "RG-0001", "Cod Riesgo": "R1", Responsable: "Oficial de seguridad de la información" },
+      { ID: "RG-0002", "Cod Riesgo": "R1", Responsable: "x".repeat(130) },
+    ], M, []);
+    expect(res.rows[0].owner).toBe("Oficial de seguridad de la información");
+    expect(res.errors[0]).toMatch(/Fila 3: el responsable admite máximo 120/);
+  });
   it("admite varios procesos por causa", () => {
     const res = mapRiskRows([{ ID: "RG-0001", "Cod Riesgo": "R1", Proceso: "Nómina; Compras ;Nómina" }, { ID: "RG-0002", "Cod Riesgo": "R1", Proceso: "" }], M, []);
     expect(res.rows[0].processes).toEqual(["Nómina", "Compras"]);

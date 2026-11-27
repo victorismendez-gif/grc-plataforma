@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(11);
+select plan(14);
 
 insert into auth.users (id, email, aud, role) values
   ('d2000000-0000-4000-8000-000000000001', 'admin@rta.test', 'authenticated', 'authenticated'),
@@ -44,6 +44,11 @@ select throws_ok($$ insert into public.risk_entry_asset_types (organization_id, 
                     select app.current_org_id(), e.id, c.id from public.risk_entries e, public.catalog_items c
                      where e.code = 'RG-0002' and c.catalog <> 'asset_type' limit 1 $$,
                  '23503', null, 'Solo admite ítems del catálogo de tipos de activo');
+
+select lives_ok($$ select public.risk_import('[{"line":2,"code":"RG-0001","owner":"Oficial de seguridad"},{"line":3,"code":"RG-0002","owner":"admin@rta.test"}]'::jsonb, true) $$,
+                'Carga el responsable');
+select is((select owner_text from public.risk_entries where code = 'RG-0001'), 'Oficial de seguridad', 'Responsable como texto');
+select ok((select owner_id is not null and owner_text is null from public.risk_entries where code = 'RG-0002'), 'Responsable vinculado al usuario por correo');
 
 -- Otra organización no ve los vínculos
 select set_config('request.jwt.claims', '{"sub":"d2000000-0000-4000-8000-000000000003","aal":"aal2","email":"otro@rtb.test"}', true);

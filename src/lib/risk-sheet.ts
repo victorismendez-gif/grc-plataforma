@@ -5,7 +5,7 @@ import { STYLE, type Cell, type Workbook } from "@/lib/xlsx-writer";
 
 type Field =
   | "code" | "risk_code" | "risk_name" | "cause_code" | "cause" | "category" | "factor" | "event"
-  | "controls" | "treatment" | "strategy" | "process" | "asset_types" | "probability" | "impact";
+  | "controls" | "treatment" | "strategy" | "process" | "owner" | "asset_types" | "probability" | "impact";
 
 const EXACT: Record<Field, string[]> = {
   code: ["id", "idregistro", "codigoregistro", "registro"],
@@ -20,6 +20,7 @@ const EXACT: Record<Field, string[]> = {
   treatment: ["tratamientoposible", "tratamiento", "descripciontratamiento", "plandetratamiento"],
   strategy: ["estrategia", "estrategiadetratamiento", "opciondetratamiento"],
   process: ["proceso", "procesoasociado"],
+  owner: ["responsable", "responsabledelriesgo", "duenodelriesgo", "propietariodelriesgo", "dueno"],
   asset_types: ["tipodeactivo", "tiposdeactivo", "tipoactivo", "tiposactivo", "tipodeactivoafectado", "tiposdeactivoafectados", "activosafectados", "activoafectado"],
   probability: ["probabilidad", "probabilidadinherente"],
   impact: ["impacto", "impactoinherente"],
@@ -60,6 +61,7 @@ export type RiskImportRow = {
   treatment?: string;
   strategy?: string;
   processes?: string[];
+  owner?: string;
   asset_types?: string[];
   probability?: number | null;
   impact?: number | null;
@@ -122,6 +124,14 @@ export function mapRiskRows(
     if (clip(o.process, 2000)) {
       const procs = [...new Set(String(o.process).split(/[;\n|]+/).map((x) => x.trim().slice(0, 160)).filter((x) => x.length >= 2))];
       if (procs.length) row.processes = procs;
+    }
+    const owner = clip(o.owner, 200);
+    if (owner) {
+      if (owner.length > 120) {
+        errors.push(`Fila ${line}: el responsable admite máximo 120 caracteres; indica un solo responsable.`);
+        return;
+      }
+      row.owner = owner;
     }
     if (has.has("asset_types") && clip(o.asset_types, 5)) {
       const { codes, unknown } = parseAssetTypes(o.asset_types, assetTypes);
@@ -259,9 +269,10 @@ export function buildRiskWorkbook(input: {
     "3. Para agregar riesgos nuevos deja vacía la columna ID y llena Cod Riesgo, Riesgo, Cod Causa, Causa, Tipo de riesgo, Factor, Evento de amenaza y Controles relacionados (códigos COTI separados por «;»).",
     "4. Tipo de activo: escribe uno o varios tipos separados por «;» (por ejemplo «Computador portátil; Servidor»), con los nombres de la hoja «Escalas». La ficha de cada activo muestra los escenarios de su tipo. Si dejas la celda vacía, se conservan los tipos que ya tenga el escenario.",
     "5. Proceso: una causa puede tener varios procesos; escríbelos separados por «;». Los procesos se asocian a la causa y todos los escenarios con esa causa los comparten. Si un proceso no existe, se crea. Si dejas la celda vacía, se conservan los que ya tenga la causa.",
-    "6. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
-    "7. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
-    "8. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
+    "6. Responsable: una persona o cargo por escenario (máximo 120 caracteres). Si coincide con el nombre o correo de un usuario de la plataforma, queda vinculado a ese usuario. Si dejas la celda vacía, se conserva el actual.",
+    "7. No cambies la columna ID: identifica el riesgo en la plataforma. Las columnas de zona y residual son informativas.",
+    "8. La carga muestra una vista previa; si hay errores no se aplica ningún cambio.",
+    "9. La hoja «Escalas» explica cada nivel de probabilidad e impacto de la metodología vigente.",
   ].forEach((t) => line(t));
 
   const col = (name: string) => String.fromCharCode(65 + HEADERS.indexOf(name));
