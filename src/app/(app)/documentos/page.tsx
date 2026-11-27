@@ -10,12 +10,13 @@ import { createDocument } from "./actions";
 
 export const metadata: Metadata = { title: "Documentos" };
 
-type SP = { error?: string; ok?: string; tipo?: string; q?: string };
+type SP = { error?: string; ok?: string; tipo?: string; q?: string; proceso?: string };
 type Row = {
   id: string;
   code: string;
   title: string;
   doc_type: string;
+  version_label: string | null;
   next_review_on: string | null;
   active: boolean;
   process_id: string | null;
@@ -29,17 +30,20 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const ctx = await requirePermission("documents.read");
   const sp = await searchParams;
   const supabase = await createClient();
-  const processName = new Map((await getProcesses()).map((p) => [p.id, p.label]));
+  const processes = await getProcesses();
+  const processName = new Map(processes.map((p) => [p.id, p.label]));
   let q = supabase
     .from("documents")
-    .select("id, code, title, doc_type, next_review_on, active, process_id, owner_text, owner:profiles!documents_organization_id_owner_id_fkey(full_name), current:document_versions!documents_current_version_fkey(version_no, published_at), document_versions!document_versions_organization_id_document_id_fkey(status, version_no)")
-    .order("code");
+    .select("id, code, title, doc_type, version_label, next_review_on, active, process_id, owner_text, owner:profiles!documents_organization_id_owner_id_fkey(full_name), current:document_versions!documents_current_version_fkey(version_no, published_at), document_versions!document_versions_organization_id_document_id_fkey(status, version_no)")
+    .order("code")
+    .limit(500);
   if (sp.tipo && sp.tipo in DOC_TYPES) q = q.eq("doc_type", sp.tipo);
+  if (sp.proceso && /^[0-9a-f-]{36}$/.test(sp.proceso)) q = q.eq("process_id", sp.proceso);
   if (sp.q) {
     const term = sp.q.replace(/[%,()*]/g, " ").trim().slice(0, 60);
     if (term) q = q.or(`code.ilike.%${term}%,title.ilike.%${term}%`);
   }
-  const { data } = await q;
+  const [{ data }, { count: total }] = await Promise.all([q, supabase.from("documents").select("id", { count: "exact", head: true })]);
   const today = new Date().toISOString().slice(0, 10);
   const rows = ((data ?? []) as unknown as Row[]).filter((d) => d.active || ctx.can("documents.write"));
   const vigentes = rows.filter((d) => d.current).length;
@@ -56,7 +60,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
       </div>
       <Flash error={sp.error} ok={sp.ok} />
       <div className="kpis">
-        <div className="kpi"><b>{rows.length}</b><small>documentos</small></div>
+        <div className="kpi"><b>{total ?? rows.length}</b><small>documentos</small></div>
         <div className="kpi ok"><b>{vigentes}</b><small>con versión vigente</small></div>
         <div className={`kpi ${vencidos ? "bad" : ""}`}><b>{vencidos}</b><small>con revisión vencida</small></div>
       </div>
@@ -70,8 +74,16 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
               {Object.entries(DOC_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </label>
+          <label>
+            Proceso
+            <select name="proceso" defaultValue={sp.proceso ?? ""} style={{ maxWidth: 280 }}>
+              <option value="">Todos</option>
+              {processes.map((p) => <option key={p.id} value={p.id}>{p.code ? `${p.code} · ` : ""}{p.label}</option>)}
+            </select>
+          </label>
           <button type="submit">Filtrar</button>
         </form>
+        {rows.length >= 500 && <p className="small muted">Se muestran los primeros 500 de {total ?? "muchos"} documentos. Usa los filtros para acotar.</p>}
         <div className="tablewrap">
           <table>
             <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Proceso</th><th>Responsable</th><th>Vigente</th><th>En curso</th><th>Próxima revisión</th></tr></thead>
@@ -82,7 +94,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                 return (
                   <tr key={d.id}>
                     <td className="mono"><Link href={`/documentos/${d.id}`}>{d.code}</Link></td>
-                    <td>{d.title} {!d.active && <span className="tag crit">Inactivo</span>}</td>
+                    <td>{d.title} {d.version_label && <span className="small muted">v{d.version_label}</span>} {!d.active && <span className="tag crit">Inactivo</span>}</td>
                     <td className="small">{label(DOC_TYPES, d.doc_type)}</td>
                     <td className="small">{(d.process_id && processName.get(d.process_id)) || "—"}</td>
                     <td className="small">{d.owner?.full_name ?? d.owner_text ?? "—"}</td>

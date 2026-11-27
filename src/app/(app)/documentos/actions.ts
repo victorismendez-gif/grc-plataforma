@@ -4,19 +4,34 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { dbMessage, done, fail, str } from "@/lib/forms";
-import { oneOf, optInt, optText, optUuid } from "@/lib/forms-parse";
+import { oneOf, optDate, optInt, optText, optUuid } from "@/lib/forms-parse";
 import { DOC_TYPES, keysOf } from "@/lib/labels";
 import { resolveProcess, resolveResponsible } from "@/lib/resolve";
 
-async function docRecord(fd: FormData) {
+async function docRecord(fd: FormData, selfId?: string) {
   const owner = await resolveResponsible(str(fd, "owner"));
   const proc = await resolveProcess(str(fd, "process"));
+  // Documento padre por código: el documento hereda su proceso si no se indicó otro
+  const parentCode = str(fd, "parent_code").replace(/\s+/g, "").slice(0, 60);
+  let parent: { id: string; process_id: string | null } | null = null;
+  let parentError: string | null = null;
+  if (parentCode) {
+    const supabase = await createClient();
+    const { data } = await supabase.from("documents").select("id, process_id").eq("code", parentCode).maybeSingle();
+    if (!data) parentError = `No existe un documento con el código ${parentCode}.`;
+    else if (data.id === selfId) parentError = "Un documento no puede ser su propio padre.";
+    else parent = { id: data.id as string, process_id: data.process_id as string | null };
+  }
   return {
-    process_error: proc.error ?? null,
+    process_error: proc.error ?? parentError,
+    parent_id: parent?.id ?? null,
+    version_label: optText(fd, "version_label", 20),
+    lead_area: optText(fd, "lead_area", 160),
+    valid_from: optDate(fd, "valid_from"),
     title: str(fd, "title").slice(0, 250),
     doc_type: oneOf(fd, "doc_type", keysOf(DOC_TYPES), "procedimiento"),
     description: optText(fd, "description"),
-    process_id: proc.id,
+    process_id: proc.id ?? parent?.process_id ?? null,
     owner_id: owner.id,
     owner_text: owner.text,
     classification_id: optUuid(fd, "classification_id"),
@@ -27,10 +42,10 @@ async function docRecord(fd: FormData) {
 
 export async function createDocument(formData: FormData) {
   const ctx = await requirePermission("documents.write");
-  const code = str(formData, "code").replace(/\s+/g, "").slice(0, 40);
+  const code = str(formData, "code").replace(/\s+/g, "").slice(0, 60);
   const { process_error, ...rec } = await docRecord(formData);
   if (process_error) fail("/documentos", process_error);
-  if (!/^[A-Za-z0-9._-]{1,40}$/.test(code) || rec.title.length < 2) fail("/documentos", "Escribe un código (sin espacios) y un título.");
+  if (!code || rec.title.length < 2) fail("/documentos", "Escribe un código (sin espacios) y un título.");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("documents")
@@ -47,7 +62,7 @@ export async function updateDocument(formData: FormData) {
   await requirePermission("documents.write");
   const id = optUuid(formData, "id");
   if (!id) fail("/documentos", "Documento no válido.");
-  const { process_error, ...rec } = await docRecord(formData);
+  const { process_error, ...rec } = await docRecord(formData, id);
   if (process_error) fail(`/documentos/${id}`, process_error);
   if (rec.title.length < 2) fail(`/documentos/${id}`, "El título es obligatorio.");
   const supabase = await createClient();

@@ -42,7 +42,7 @@ export default async function DocumentPage({ params, searchParams }: Props) {
   if (!doc) notFound();
   const canWrite = ctx.can("documents.write");
   const canApprove = ctx.can("documents.approve");
-  const [{ data: versions }, { data: people }, { data: links }, { data: reqs }, { data: frameworks }] = await Promise.all([
+  const [{ data: versions }, { data: people }, { data: links }, { data: reqs }, { data: frameworks }, { data: parent }, { data: kids }, { data: proc }] = await Promise.all([
     supabase.from("document_versions").select("*").eq("document_id", id).order("version_no", { ascending: false }),
     supabase.from("profiles").select("id, full_name"),
     supabase.from("document_requirements").select("requirement:requirements(id, clause, title, framework_id)").eq("document_id", id),
@@ -50,6 +50,9 @@ export default async function DocumentPage({ params, searchParams }: Props) {
       ? supabase.from("requirements").select("id, clause, title, framework_id").eq("is_auditable", true).order("sort_key").limit(3000)
       : Promise.resolve({ data: [] as { id: string; clause: string; title: string; framework_id: string }[] }),
     supabase.from("frameworks").select("id, code, name").order("name"),
+    doc.parent_id ? supabase.from("documents").select("id, code, title").eq("id", doc.parent_id).maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("documents").select("id, code, title, doc_type, active").eq("parent_id", id).order("code").limit(500),
+    doc.process_id ? supabase.from("processes").select("id, code, name").eq("id", doc.process_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const who = new Map((people ?? []).map((p) => [p.id as string, p.full_name as string]));
   const vs = (versions ?? []) as Version[];
@@ -65,9 +68,17 @@ export default async function DocumentPage({ params, searchParams }: Props) {
         <Link href="/documentos" className="small">← Documentos</Link>
         <h1><span className="mono">{doc.code}</span> · {doc.title}</h1>
         <p className="lead">
-          {label(DOC_TYPES, doc.doc_type)} · revisión cada {doc.review_months} meses
+          {label(DOC_TYPES, doc.doc_type)}
+          {doc.version_label && <> · versión {doc.version_label}</>} · revisión cada {doc.review_months} meses
           {doc.next_review_on && <> · próxima revisión {doc.next_review_on}</>}
         </p>
+        {(proc || parent) && (
+          <p className="small" style={{ margin: "4px 0 0" }}>
+            {proc && <>Proceso: <Link href={`/procesos/${proc.id}`}>{proc.code ? `${proc.code} · ` : ""}{proc.name}</Link></>}
+            {proc && parent && " · "}
+            {parent && <>Documento padre: <Link href={`/documentos/${parent.id}`}>{parent.code}</Link> {parent.title}</>}
+          </p>
+        )}
       </div>
       <Flash {...sp} />
 
@@ -146,10 +157,25 @@ export default async function DocumentPage({ params, searchParams }: Props) {
         )}
       </section>
 
+      {(kids ?? []).length > 0 && (
+        <section className="panel">
+          <h2>Documentos asociados</h2>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {(kids ?? []).map((k) => (
+              <li key={k.id as string}>
+                <Link href={`/documentos/${k.id}`} className="mono small">{k.code as string}</Link> {k.title as string}
+                {" "}<span className="small muted">({label(DOC_TYPES, k.doc_type as string).toLowerCase()})</span>
+                {!k.active && <span className="tag crit">Inactivo</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="grid2">
         <section className="panel">
           <h2>Datos del documento</h2>
-          <DocForm doc={doc as DocData} action={updateDocument} readOnly={!canWrite} />
+          <DocForm doc={{ ...(doc as DocData), parent_code: parent?.code ?? null }} action={updateDocument} readOnly={!canWrite} />
         </section>
         <section className="panel">
           <h2>Requisitos que evidencia ({linked.length})</h2>

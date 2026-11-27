@@ -15,6 +15,10 @@ export type DocData = {
   classification_id: string | null;
   review_months: number;
   requires_acknowledgment: boolean;
+  parent_code?: string | null;
+  version_label?: string | null;
+  lead_area?: string | null;
+  valid_from?: string | null;
 };
 
 export default async function DocForm({
@@ -34,7 +38,7 @@ export default async function DocForm({
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14 }}>
         {doc && <input type="hidden" name="id" value={doc.id} />}
         <div className="row">
-          {!doc && <TextField name="code" label="Código" required maxLength={40} placeholder="POL-SI-01" />}
+          {!doc && <TextField name="code" label="Código" required maxLength={60} placeholder="POL-SI-01" />}
           <TextField name="title" label="Título" value={doc?.title} required wide maxLength={250} />
           <EnumField name="doc_type" label="Tipo" map={DOC_TYPES} value={doc?.doc_type ?? "procedimiento"} />
         </div>
@@ -45,6 +49,12 @@ export default async function DocForm({
           <ComboField name="owner" label="Responsable" value={ownerValue} options={people} placeholder="Elige o escribe un nombre" />
           <SelectField name="classification_id" label="Clasificación" options={classes} value={doc?.classification_id} />
           <TextField name="review_months" label="Revisar cada (meses)" type="number" value={doc?.review_months ?? 12} />
+        </div>
+        <div className="row">
+          <TextField name="parent_code" label="Código del documento padre" value={doc?.parent_code} maxLength={60} placeholder="POLT-GSI-001" />
+          <TextField name="version_label" label="Versión" value={doc?.version_label} maxLength={20} />
+          <TextField name="lead_area" label="Área líder" value={doc?.lead_area} maxLength={160} />
+          <TextField name="valid_from" label="Vigente desde" type="date" value={doc?.valid_from} />
         </div>
         <label className="check">
           <input type="checkbox" name="requires_acknowledgment" defaultChecked={doc?.requires_acknowledgment ?? false} />

@@ -2,6 +2,8 @@
 
 export const UNIT_TYPES = { sede: "Sede", sucursal: "Sucursal", tienda: "Tienda", area: "Área", otra: "Otra" } as const;
 export const PROCESS_TYPES = { estrategico: "Estratégico", misional: "Misional", apoyo: "Apoyo", evaluacion: "Evaluación" } as const;
+/** Lugar del proceso en la jerarquía del listado maestro. */
+export const PROCESS_TYPOLOGY = { macroproceso: "Macroproceso", proceso: "Proceso", subproceso: "Subproceso" } as const;
 export const ASSET_STATUS = {
   activo: "Activo",
   en_reparacion: "En reparación",
@@ -48,6 +50,18 @@ export const DOC_TYPES = {
   formato: "Formato",
   plan: "Plan",
   registro: "Registro",
+  anexo: "Anexo",
+  diagrama: "Diagrama",
+  modelamiento: "Modelamiento",
+  presentacion: "Presentación",
+  protocolo: "Protocolo",
+  video: "Video",
+  elearning: "E-learning",
+  programa: "Programa",
+  infografia: "Infografía",
+  matriz: "Matriz",
+  reglamento: "Reglamento",
+  entorno: "Entorno empresarial",
   otro: "Otro",
 } as const;
 export const VERSION_STATUS = {
